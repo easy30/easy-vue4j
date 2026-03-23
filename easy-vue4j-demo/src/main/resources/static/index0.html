@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="cn">
+<head>
+    <meta charset="UTF-8">
+    <title>管理后台</title>
+    <link rel="stylesheet" href="../../devops/js/lib/element-plus-2.2.29.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="../../devops/js/lib/vue.global-3.2.41.js"></script>
+    <script src="../../devops/js/lib/vue-router.global-4.1.6.js"></script>
+    <script src="../../devops/js/lib/element-plus-2.2.29.min.js"></script>
+    <script src="../../devops/js/lib/axios.min.js"></script>
+    <style>
+        .menu-icon { width: 20px; text-align: center; margin-right: 8px; }
+        #app, .el-container { height: 100vh; width: 100%; }
+        .el-aside { width: 220px !important; }
+        .content-frame { width: 100%; height: 100%; overflow: auto; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <el-container>
+        <!-- 左侧菜单 -->
+        <el-aside style="background-color: #304156; color: #fff;">
+            <div style="height: 60px; display: flex; align-items: center; justify-content: center; background-color: #2b3a4b; font-size: 18px; font-weight: bold; color: #fff;">
+                🎯 管理后台
+            </div>
+            <el-menu
+                    :default-active="activeMenuPath"
+                    background-color="#304156"
+                    text-color="#bfcbd9"
+                    active-text-color="#409EFF"
+                    @select="handleMenuSelect">
+                <el-menu-item index="/log-level">
+                    <i class="fas fa-cog menu-icon"></i>
+                    <span>日志级别设置</span>
+                </el-menu-item>
+                <el-menu-item index="/system-monitor">
+                    <i class="fas fa-desktop menu-icon"></i>
+                    <span>系统监控</span>
+                </el-menu-item>
+                <el-menu-item index="/log-query">
+                    <i class="fas fa-search menu-icon"></i>
+                    <span>日志查询</span>
+                </el-menu-item>
+                <el-menu-item index="/appender-config">
+                    <i class="fas fa-tools menu-icon"></i>
+                    <span>Appender 配置</span>
+                </el-menu-item>
+            </el-menu>
+        </el-aside>
+
+        <!-- 右侧主界面 -->
+        <el-container>
+            <el-header style="background-color: #fff; box-shadow: 0 1px 4px rgba(0,21,41,.08); display: flex; align-items: center; justify-content: space-between; padding: 0 20px;">
+                <div style="font-size: 16px; font-weight: bold;">{{ currentMenuName }}</div>
+                <el-dropdown>
+                    <span style="cursor: pointer; display: flex; align-items: center;">
+                        <el-avatar :size="32" icon="user-filled" style="background-color: #409EFF; margin-right: 8px;"></el-avatar>
+                        <span>管理员</span>
+                    </span>
+                    <template #dropdown>
+                        <el-dropdown-menu>
+                            <el-dropdown-item>个人中心</el-dropdown-item>
+                            <el-dropdown-item divided>退出登录</el-dropdown-item>
+                        </el-dropdown-menu>
+                    </template>
+                </el-dropdown>
+            </el-header>
+            <el-main style="background-color: #f5f7fa; padding: 20px;">
+                <!-- 路由视图 -->
+                <router-view v-slot="{ Component }">
+                    <keep-alive>
+                        <component :is="Component" />
+                    </keep-alive>
+                </router-view>
+            </el-main>
+        </el-container>
+    </el-container>
+</div>
+
+<script type="module">
+    // Vue 和 Vue Router 已经通过全局脚本加载
+    const { createApp, ref, computed } = Vue;
+    const { createRouter, createWebHashHistory } = VueRouter;
+
+    // 路由配置
+    const routes = [
+        {
+            path: '/log-level',
+            name: 'SetLogLevel',
+            component: () => import('./setLogLevel.vue'),
+            meta: { title: '日志级别设置' }
+        },
+        {
+            path: '/system-monitor',
+            name: 'SystemMonitor',
+            component: () => import('./systemMonitor.vue'),
+            meta: { title: '系统监控' }
+        },
+        {
+            path: '/log-query',
+            name: 'LogQuery',
+            component: () => import('./logQuery.vue'),
+            meta: { title: '日志查询' }
+        },
+        {
+            path: '/appender-config',
+            name: 'AppenderConfig',
+            component: () => import('./appenderConfig.vue'),
+            meta: { title: 'Appender 配置' }
+        },
+        {
+            path: '/',
+            redirect: '/log-level'
+        }
+    ];
+
+    // 创建路由
+    const router = createRouter({
+        history: createWebHashHistory(),
+        routes
+    });
+
+    const app = createApp({
+        setup() {
+            // 从路由获取当前激活的菜单
+            const activeMenuPath = computed(() => {
+                return router.currentRoute.value.path;
+            });
+
+            // 获取当前菜单名称
+            const currentMenuName = computed(() => {
+                const route = router.currentRoute.value;
+                return route.meta?.title || '';
+            });
+
+            // 菜单选择处理
+            const handleMenuSelect = (path) => {
+                router.push(path);
+            };
+
+            return {
+                activeMenuPath,
+                currentMenuName,
+                handleMenuSelect
+            };
+        }
+    });
+
+    app.use(router);
+    app.use(ElementPlus);
+    app.mount('#app');
+</script>
+</body>
+</html>

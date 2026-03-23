@@ -1,11 +1,12 @@
 package com.github.easy30.vue4j;
 
+import jakarta.servlet.http.*;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.servlet.*;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.*;
+
 import java.io.IOException;
+
 
 /**
  * Vue 文件过滤器 - 集成 VueResourceTransformer 的所有功能
@@ -15,7 +16,7 @@ import java.io.IOException;
  * @author CyberWater
  */
 @Slf4j
-public class VueFilter implements Filter {
+public class VueFilter2 implements Filter {
 
     /**
      * Vue 文件编码，默认 UTF-8

@@ -1,5 +1,9 @@
 package com.github.easy30.vue4j;
 
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,9 +15,10 @@ import java.util.regex.Pattern;
  */
 public class VueToJs {
 
-    private static final Pattern TEMPLATE_PATTERN = Pattern.compile("<template\\b[^>]*>([\\s\\S]*)</template>", Pattern.DOTALL);
-    private static final Pattern SCRIPT_PATTERN = Pattern.compile( "<script\\b[^>]*>([\\s\\S]*?)</script>", Pattern.DOTALL);
-    //private static final Pattern NAME_PATTERN = Pattern.compile("name:\\s*['\"](\\w+)['\"]");
+    // 移除了用于匹配 template 和 script 标签的正则表达式，改用 jsoup 解析
+    //private static final Pattern TEMPLATE_PATTERN = Pattern.compile("<template\\b[^>]*>([\\s\\S]*)</template>", Pattern.DOTALL);
+    //private static final Pattern SCRIPT_PATTERN = Pattern.compile( "<script\\b[^>]*>([\\s\\S]*?)</script>", Pattern.DOTALL);
+    //private static final Pattern NAME_PATTERN = Pattern.compile("name:\\s*['"](\\w+)['"]");
     private static final Pattern EXPORT_DEFAULT_PATTERN = Pattern.compile("export\\s+default\\s+(\\{)", Pattern.DOTALL);
 
     /**
@@ -39,8 +44,9 @@ public class VueToJs {
      * @throws IOException 当解析 Vue 文件格式错误时抛出（缺少 template 或 script 标签）
      */
     public static String convertVueToJs(String vueContent, String fileName) throws IOException {
-        String template = extractTemplate(vueContent);
-        String scriptContent = extractScript(vueContent);
+        Document doc = Jsoup.parse(vueContent);
+        String template = extractTemplate(doc,vueContent);
+        String scriptContent = extractScript(doc,vueContent);
         //String componentName = extractComponentName(scriptContent, fileName);
         return generateJsContent(null, scriptContent, template);
     }
@@ -52,12 +58,13 @@ public class VueToJs {
      * @return 提取的模板 HTML 字符串（已去除首尾空白）
      * @throws IOException 当文件中缺少 template 标签时抛出
      */
-    private static String extractTemplate(String vueContent) throws IOException {
-        Matcher matcher = TEMPLATE_PATTERN.matcher(vueContent);
-        if (!matcher.find()) {
+    private static String extractTemplate( Document doc ,String vueContent) throws IOException {
+
+        Element templateElement = doc.selectFirst("template");
+        if (templateElement == null) {
             throw new IOException("Invalid Vue file: missing <template>");
         }
-        return matcher.group(1).trim();
+        return templateElement.html().trim();
     }
 
     /**
@@ -67,12 +74,12 @@ public class VueToJs {
      * @return 提取的 JavaScript 代码字符串（已去除首尾空白）
      * @throws IOException 当文件中缺少 script 标签时抛出
      */
-    private static String extractScript(String vueContent) throws IOException {
-        Matcher matcher = SCRIPT_PATTERN.matcher(vueContent);
-        if (!matcher.find()) {
+    private static String extractScript( Document doc ,String vueContent) throws IOException {
+        Element scriptElement = doc.selectFirst("script");
+        if (scriptElement == null) {
             throw new IOException("Invalid Vue file: missing <script>");
         }
-        return matcher.group(1).trim();
+        return scriptElement.html().trim();
     }
 
     /**
