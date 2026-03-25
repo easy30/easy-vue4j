@@ -24,6 +24,8 @@
 </template>
 
 <script>
+import { ElMessage } from 'element-plus';
+
 export default {
     name: 'AppenderConfig',
     data() {
@@ -36,7 +38,7 @@ export default {
     },
     methods: {
         editAppender(appender) {
-            ElementPlus.ElMessage.info(`编辑 Appender: ${appender.name}`);
+            ElMessage.info(`编辑 Appender: ${appender.name}`);
         }
     }
 }

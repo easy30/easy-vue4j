@@ -50,6 +50,7 @@
 </template>
 
 <script>
+import { ElMessage } from 'element-plus';
 
 export default {
     name: 'SetLogLevel',
@@ -78,12 +79,12 @@ export default {
                     localStorage.setItem('recent_logger_name', this.loggerName);
                 }
                 if (this.appenders.length === 0) {
-                    ElementPlus.ElMessage.info('未找到 appender');
+                    ElMessage.info('未找到 appender');
                 } else {
-                    ElementPlus.ElMessage.success(`找到 ${this.appenders.length} 个 appender`);
+                    ElMessage.success(`找到 ${this.appenders.length} 个 appender`);
                 }
             } catch (error) {
-                ElementPlus.ElMessage.error('请求失败：' + error.message);
+                ElMessage.error('请求失败：' + error.message);
                 this.appenders = [];
             } finally {
                 this.loading = false;

@@ -3,27 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>管理后台</title>
-    <link rel="stylesheet" href="js/element-plus-2.13.6.min.css">
+    <link rel="stylesheet" href="js/element-plus-2.2.29.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <script type="importmap">
-    {
-      "imports": {
-        "vue": "./js/vue@3.5.31.esm-browser.js",
-        "vue-router": "./js/vue-router@4.6.4.esm-browser.js",
-        "element-plus": "./js/element-plus@2.13.6.esm-browser.mjs",
-        "axios": "./js/axios@1.13.6.esm-browser.js"
-      }
-    }
-    </script>
-    
-    <!-- 
-      库版本说明:
-      - vue: 3.5.31 (生产版)
-      - vue-router: 4.6.4 (生产版，无 devtools 依赖)
-      - element-plus: 2.13.6
-      - axios: 1.13.6
-    -->
+    <script src="js/vue.global-3.2.41.js"></script>
+    <script src="js/vue-router.global-4.1.6.js"></script>
+    <script src="js/element-plus-2.2.29.min.js"></script>
+    <script src="js/axios.min.js"></script>
     <style>
         .menu-icon { width: 20px; text-align: center; margin-right: 8px; }
         #app, .el-container { height: 100vh; width: 100%; }
@@ -98,10 +83,9 @@
 </div>
 
 <script type="module">
-    import { createApp, ref, computed } from 'vue';
-    import { createRouter, createWebHashHistory } from 'vue-router';
-    import ElementPlus from 'element-plus';
-    import axios from 'axios';
+    // Vue 和 Vue Router 已经通过全局脚本加载
+    const { createApp, ref, computed } = Vue;
+    const { createRouter, createWebHashHistory } = VueRouter;
 
     // 导入路由配置
     import('./routes.js').then(module => {
@@ -144,11 +128,6 @@
 
         app.use(router);
         app.use(ElementPlus);
-        
-        // 提供全局变量给 Vue 组件使用
-        app.config.globalProperties.$axios = axios;
-        app.provide('axios', axios);
-        
         app.mount('#app');
     }
 </script>

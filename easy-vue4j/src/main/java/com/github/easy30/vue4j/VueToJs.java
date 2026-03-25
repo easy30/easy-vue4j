@@ -1,21 +1,15 @@
 package com.github.easy30.vue4j;
 
 
-import com.helger.css.decl.*;
+import com.github.easy30.vue4j.object.TemplateResult;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import com.helger.css.reader.CSSReader;
-import com.helger.css.writer.CSSWriter;
-
 import java.io.IOException;
-import java.io.StringReader;
-import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,7 +23,7 @@ public class VueToJs {
     //private static final Pattern SCRIPT_PATTERN = Pattern.compile( "<script\\b[^>]*>([\\s\\S]*?)</script>", Pattern.DOTALL);
     //private static final Pattern NAME_PATTERN = Pattern.compile("name:\\s*['"](\\w+)['"]");
     private static final Pattern EXPORT_DEFAULT_PATTERN = Pattern.compile("export\\s+default\\s+(\\{)", Pattern.DOTALL);
-    private static final Pattern IMPORT_PATTERN = Pattern.compile("^import\\s+.*?;", Pattern.MULTILINE);
+    private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s+.*?(?:;|$)", Pattern.DOTALL | Pattern.MULTILINE);
     private static final Pattern DEFINE_EXPOSE_PATTERN = Pattern.compile("defineExpose\\(([^)]*)\\)");
 
     /**
@@ -56,10 +50,13 @@ public class VueToJs {
      */
     public static String convertVueToJs(String vueContent, String fullName) throws IOException {
         Document doc = Jsoup.parse(vueContent);
-        String template = extractTemplate(doc, vueContent);
         
         // 生成组件唯一 ID
         String componentId = generateComponentId(fullName);
+
+        // 使用 VueTemplate 处理所有 style 标签（直接从 doc 提取 template）
+        VueTemplate vueTemplate = new VueTemplate(componentId);
+        TemplateResult vueTemplateResult = vueTemplate.process(doc);
 
         // 处理 <script> 和 <script setup>
         Element scriptElement = doc.selectFirst("script:not([setup])");
@@ -81,121 +78,22 @@ public class VueToJs {
             setupScript = scriptSetupElement.html().trim();
         }
         
-        // 提取并处理 style
-        String style = extractAndProcessStyle(doc, componentId);
 
-        return convertContent(script, template, setupScript, style);
+
+        return convertContent(vueTemplateResult, script, setupScript);
     }
 
-    /**
-     * 从 Vue 文件中提取 template 标签内的内容
-     *
-     * @param vueContent Vue 文件的完整内容
-     * @return 提取的模板 HTML 字符串（已去除首尾空白）
-     * @throws IOException 当文件中缺少 template 标签时抛出
-     */
-    private static String extractTemplate(Document doc, String vueContent) throws IOException {
-
-        Element templateElement = doc.selectFirst("template");
-        if (templateElement == null) {
-            throw new IOException("Invalid Vue file: missing <template>");
-        }
-        return templateElement.html().trim();
-    }
-    
-    /**
-     * 提取并处理 style 标签，添加组件作用域标识
-     *
-     * @param doc         jsoup 解析后的文档
-     * @param componentId 组件唯一 ID
-     * @return 处理后的 CSS 字符串，如果没有 style 标签则返回 null
-     */
-    private static String extractAndProcessStyle(Document doc, String componentId) {
-        Element styleElement = doc.selectFirst("style");
-        if (styleElement == null) {
-            return null;
-        }
-        
-        String cssContent = styleElement.html();
-        boolean scoped = styleElement.hasAttr("scoped");
-        
-        if (scoped) {
-            return addScopedAttribute(cssContent, componentId);
-        }
-        
-        return cssContent;
-    }
-    
-    /**
-     * 为 CSS 添加作用域属性选择器
-     *
-     * @param css         CSS 内容
-     * @param componentId 组件唯一 ID
-     * @return 添加了作用域的 CSS
-     */
-    private static String addScopedAttribute(String css, String componentId) {
-        try {
-            // 使用 ph-css 解析 CSS (ph-css 8.x)
-            CascadingStyleSheet cssParsed = CSSReader.readFromString(css);
-                 
-            if (cssParsed == null) {
-                return css; // 解析失败时返回原始 CSS
-            }
-                
-            String scopedAttr = "[data-" + componentId + "]";
-                
-            // 遍历所有规则 - 参考 CssEditDemo 的方式
-            for (int i = 0; i < cssParsed.getRuleCount(); i++) {
-                Object rule = cssParsed.getRuleAtIndex(i);
-                
-                // 检查是否是样式规则 (CSSStyleRule)
-                if (rule instanceof CSSStyleRule) {
-                    CSSStyleRule styleRule = (CSSStyleRule) rule;
-
-                    // 获取选择器列表并修改
-                    List<CSSSelector> selectors = styleRule.getAllSelectors();
-                    for (CSSSelector selector : selectors) {
-                        // 获取最后一个 Member 并追加作用域属性
-                        int lastIdx = selector.getMemberCount() - 1;
-                        ICSSSelectorMember lastMember = selector.getMemberAtIndex(lastIdx);
-                        String originalValue = lastMember.getAsCSSString();
-                        
-                        // 移除最后一个 Member
-                        selector.removeMember(lastIdx);
-                        
-                        // 创建新的 Member 并添加（包含作用域属性）
-                        ICSSSelectorMember newMember = new CSSSelectorSimpleMember(
-                            originalValue + scopedAttr
-                        );
-                        selector.addMember(newMember);
-                    }
-                }
-            }
-                
-            // 写回 CSS 字符串
-            StringWriter writer = new StringWriter();
-            CSSWriter writerObj = new CSSWriter();
-            writerObj.writeCSS(cssParsed, writer);
-            return writer.toString();
-                
-        } catch (Exception e) {
-            // 如果解析失败，返回原始 CSS
-            e.printStackTrace();
-            return css;
-        }
-    }
-    
     /**
      * 根据文件名生成组件唯一 ID
      *
      * @param fullName 文件名
-     * @return 唯一 ID 字符串
+     * @return 唯一 ID 字符串（不含前缀）
      */
     private static String generateComponentId(String fullName) {
         String baseName = fullName.replace(".vue", "");
         // 使用文件名的 hash 值，保证唯一性且简短
         int hash = Math.abs(fullName.hashCode());
-        return "data-v-" + Integer.toHexString(hash);
+        return Integer.toHexString(hash);
     }
 
     /**
@@ -216,22 +114,10 @@ public class VueToJs {
 //        return generateJsContent(componentName, scriptContent, template, null);
 //    }
 
-    /**
-     * 处理包含 <script setup> 的脚本内容
-     *
-     * @param script      普通 <script> 的内容（可能为空或默认值）
-     * @param template    模板 HTML 字符串
-     * @param setupScript <script setup> 中的代码
-     * @param style       处理后的 CSS 样式（带作用域）
-     * @return 处理后的完整 JavaScript 代码
-     */
-    private static String convertContent(String script, String template, String setupScript, String style) {
-
-
-        ///setupScript 处理：提取 import, 转化返回对象.
+    private static String convertContent(TemplateResult vueTemplateResult,String script, String setupScript) {
         StringBuilder setupImports = null;
+        
         if (StringUtils.isNotBlank(setupScript)) {
-            // 提取所有 import 语句
             setupImports = new StringBuilder();
             Matcher importMatcher = IMPORT_PATTERN.matcher(setupScript);
 
@@ -240,50 +126,32 @@ public class VueToJs {
             }
 
             if (setupImports.length() > 0) {
-                // 移除所有 import 语句
                 setupScript = IMPORT_PATTERN.matcher(setupScript).replaceAll("");
             }
-            // 处理 defineExpose 转为 return
             setupScript = processDefineExpose(setupScript);
-
         }
 
-        ///以 script 为基础，找到插入点，插入 template 和 setup (). 最后把 setupImports 放入头部.
         Matcher matcher = EXPORT_DEFAULT_PATTERN.matcher(script);
         if (!matcher.find()) {
             return script;
         }
 
-        // 找到 { 的位置
-        int bracePos = matcher.start(1);
 
-        // 在 { 后面插入 template:
         StringBuilder result = new StringBuilder(script);
-
-
-        //template
-        StringBuilder insertCode = new StringBuilder("\n    template: `" + escapeTemplate(template) + "`,\n");
-        // setup()
+        StringBuilder insertCode=new StringBuilder(vueTemplateResult.getTemplate());
         if (setupScript != null) {
             insertCode.append("    setup() {\n");
             insertCode.append(setupScript).append("\n");
             insertCode.append("    }\n");
         }
-        
-        // style
-        if (style != null && !style.isEmpty()) {
-            insertCode.append("    styles: `").append(escapeTemplate(style)).append("`");
-        }
-        
-        //insert template and setup
-        result.insert(bracePos + 1, insertCode);
 
-        //insert setup imports
+        int bracePos = matcher.start(1);
+        // processedResult 已经包含完整的 template、styles、$style 代码
+        result.insert(bracePos + 1, "\n" + insertCode);
+
         if (setupImports != null) result.insert(0, setupImports);
 
-        return result.toString();
-
-
+        return StringUtils.trimToEmpty(vueTemplateResult.getStyleInjectScript())+"\n"+ result.toString();
     }
 
     /**

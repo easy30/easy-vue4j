@@ -34,6 +34,8 @@
 </template>
 
 <script>
+import { ElMessage } from 'element-plus';
+
 export default {
     name: 'LogQuery',
     data() {
@@ -47,7 +49,7 @@ export default {
     },
     methods: {
         onSearch() {
-            ElementPlus.ElMessage.info('查询功能开发中...');
+            ElMessage.info('查询功能开发中...');
         },
         getLevelType(level) {
             const typeMap = {

@@ -1,5 +1,6 @@
 package com.github.easy30.vue4j;
 
+import com.github.easy30.vue4j.object.FileContent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 
@@ -170,5 +171,21 @@ public class VueFilterBak implements Filter {
         log.info("VueFilter destroyed, cache cleared");
     }
 
+    private  static   class FileContent {
+        private final byte[] bytes;
+        private final long lastModified;
 
+        FileContent(byte[] resource, long lastModified) {
+            this.bytes = resource;
+            this.lastModified = lastModified;
+        }
+
+        byte[] getBytes() {
+            return bytes;
+        }
+
+        long getLastModified() {
+            return lastModified;
+        }
+    }
 }

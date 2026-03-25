@@ -1,5 +1,6 @@
 package com.github.easy30.vue4j;
 
+import com.github.easy30.vue4j.object.FileContent;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 
