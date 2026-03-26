@@ -11,5 +11,6 @@ public class TemplateResult {
 
     private String template;
     private String styleInjectScript;
+    private Boolean hasModuleStyle;
 
 }

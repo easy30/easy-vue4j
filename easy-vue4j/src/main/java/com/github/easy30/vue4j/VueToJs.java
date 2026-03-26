@@ -50,7 +50,7 @@ public class VueToJs {
      */
     public static String convertVueToJs(String vueContent, String fullName) throws IOException {
         Document doc = Jsoup.parse(vueContent);
-        
+
         // 生成组件唯一 ID
         String componentId = generateComponentId(fullName);
 
@@ -77,7 +77,7 @@ public class VueToJs {
         if (scriptSetupElement != null) {
             setupScript = scriptSetupElement.html().trim();
         }
-        
+
 
 
         return convertContent(vueTemplateResult, script, setupScript);
@@ -116,7 +116,7 @@ public class VueToJs {
 
     private static String convertContent(TemplateResult vueTemplateResult,String script, String setupScript) {
         StringBuilder setupImports = null;
-        
+        boolean hasStyle=StringUtils.isNotBlank(vueTemplateResult.getStyleInjectScript());
         if (StringUtils.isNotBlank(setupScript)) {
             setupImports = new StringBuilder();
             Matcher importMatcher = IMPORT_PATTERN.matcher(setupScript);
@@ -128,7 +128,7 @@ public class VueToJs {
             if (setupImports.length() > 0) {
                 setupScript = IMPORT_PATTERN.matcher(setupScript).replaceAll("");
             }
-            setupScript = processDefineExpose(setupScript);
+            setupScript = processDefineExpose(setupScript,vueTemplateResult.getHasModuleStyle());
         }
 
         Matcher matcher = EXPORT_DEFAULT_PATTERN.matcher(script);
@@ -143,6 +143,8 @@ public class VueToJs {
             insertCode.append("    setup() {\n");
             insertCode.append(setupScript).append("\n");
             insertCode.append("    }\n");
+        }else if(vueTemplateResult.getHasModuleStyle()){
+            insertCode.append("    setup() {\n return { $style} }\n");
         }
 
         int bracePos = matcher.start(1);
@@ -160,12 +162,14 @@ public class VueToJs {
      * @param setupCode setup 函数中的代码
      * @return 处理后的代码（defineExpose 被替换为 return）
      */
-    private static String processDefineExpose(String setupCode) {
+    private static String processDefineExpose(String setupCode,boolean style) {
         Matcher matcher = DEFINE_EXPOSE_PATTERN.matcher(setupCode);
         if (matcher.find()) {
             String exposeArgs = matcher.group(1).trim();
             // 将 defineExpose({...}) 替换为 return {...};
-            String returnStatement = "return " + exposeArgs + ";";
+            String returnStatement = !style?
+                    "return " + exposeArgs + ";"
+                    :"return { ..." + exposeArgs + ", ...all_styles };";
             return matcher.replaceAll(returnStatement);
         }
         return setupCode;

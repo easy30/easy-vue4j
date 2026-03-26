@@ -1,6 +1,6 @@
 <template>
-  <div class="container" :class="$style.container">
-    <h1 :class="$style.title">{{ title }}</h1>
+  <div  :class="$style.container">
+    <h1 :class="m1.title">{{ title }}</h1>
     <p class="description">This is scoped style.</p>
   </div>
 </template>
@@ -24,6 +24,8 @@ defineExpose({ title })
   padding: 20px;
   background-color: #f0f0f0;
 }
+</style>
+<style module="m1">
 .title {
   color: blue;
   font-weight: bold;

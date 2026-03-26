@@ -71,12 +71,13 @@ public class VueTemplate {
         if (styleElements.isEmpty()) {
             String template = templateElement.html().trim();
             // 没有 style，只返回 template
-            return new TemplateResult("    template: `" + escape(template) + "`,\n", null);
+            return new TemplateResult("    template: `" + escape(template) + "`,\n", null,false);
         }
 
 
         StringBuilder allCss = new StringBuilder();
-        ProcessedCss processedCss = null;
+        String processedCss = null;
+        Map<String, String> moduleClassMapping =new HashMap<>();
         // 遍历所有 style 标签
         for (Element styleElement : styleElements) {
             String cssContent = styleElement.html();
@@ -85,10 +86,9 @@ public class VueTemplate {
             String moduleName = null;
 
             if (module) {
-                String moduleValue = styleElement.attr("module");
-                if (!moduleValue.isEmpty()) {
-                    moduleName = moduleValue;
-                }
+                 moduleName = styleElement.attr("module");
+                if (StringUtils.isBlank(moduleName)) moduleName="def_m_style";
+
                 hasModule = true;
             }
 
@@ -97,8 +97,8 @@ public class VueTemplate {
             }
 
             // 处理 CSS
-            processedCss = processCss(cssContent, scoped, module, moduleName);
-            allCss.append(processedCss.getCss());
+            processedCss = processCss(cssContent, scoped, module, moduleName,moduleClassMapping);
+            allCss.append(processedCss);
         }
 
         // 如果使用了 scoped，给 template 所有元素添加 data-v-xxx 属性
@@ -106,7 +106,6 @@ public class VueTemplate {
             processTemplateScoped(templateElement);
         }
 
-        Map<String, String> moduleClassMapping = processedCss.getModuleClassMapping();
 
         // 如果有 module，需要更新 template 中的 class（在 CSS 处理之后）
         if (hasModule && !moduleClassMapping.isEmpty()) {
@@ -124,33 +123,34 @@ public class VueTemplate {
         result.append("`,\n");
 
         String styleInjectScript = null;
+        boolean hasModuleStyle=false;
         if (allCss.length() > 0) {
 
-            styleInjectScript = STYLE_INJECT_TEMPLATE.replace("{{css}}", escape(allCss.toString())).replace("{{id}}", componentId);
-
+            String styleClassMapping="";
             // 如果有 module，添加 $style 对象
             if (hasModule && !moduleClassMapping.isEmpty()) {
-                result.append("\n").append(generateStyleObject(moduleClassMapping));
-            } else {
-                result.append("\n");
+                hasModuleStyle=true;
+                styleClassMapping="\n"+generateStyleObject(moduleClassMapping)+"\n";
             }
+            styleInjectScript = styleClassMapping+STYLE_INJECT_TEMPLATE.replace("{{css}}", escape(allCss.toString())).replace("{{id}}", componentId);
+
+
         }
 
-        return new TemplateResult(result.toString(), styleInjectScript);
+        return new TemplateResult(result.toString(), styleInjectScript,hasModuleStyle);
     }
 
     /**
      * 处理单个 CSS
      */
-    private ProcessedCss processCss(String cssContent, boolean scoped, boolean module, String moduleName) {
+    private String processCss(String cssContent, boolean scoped, boolean module, String moduleName,Map<String, String> moduleClassMapping) {
         try {
             CascadingStyleSheet cssParsed = CSSReader.readFromString(cssContent);
 
             if (cssParsed == null) {
-                return new ProcessedCss(cssContent, new HashMap<>());
+                return cssContent;
             }
 
-            Map<String, String> classMapping = new HashMap<>();
 
             for (int i = 0; i < cssParsed.getRuleCount(); i++) {
                 Object rule = cssParsed.getRuleAtIndex(i);
@@ -164,7 +164,7 @@ public class VueTemplate {
 
                         if (module) {
                             // Module: 替换类名
-                            processSelectorForModule(selector, classMapping, moduleName);
+                            processSelectorForModule(selector, moduleClassMapping, moduleName);
                         }
 
                         if (scoped) {
@@ -180,11 +180,11 @@ public class VueTemplate {
             cssWriter.setWriteHeaderText( false);
             cssWriter.writeCSS(cssParsed, writer);
 
-            return new ProcessedCss(writer.toString(), classMapping);
+            return writer.toString();
 
         } catch (Exception e) {
             e.printStackTrace();
-            return new ProcessedCss(cssContent, new HashMap<>());
+            return cssContent;
         }
     }
 
@@ -266,6 +266,16 @@ public class VueTemplate {
                     element.attr("class", newClasses.toString().trim());
                 }
             }
+            
+            // 处理 :class 绑定，将 $style. 替换为 def_m_style.
+            if (element.hasAttr(":class")) {
+                String dynamicClass = element.attr(":class");
+                // 替换所有的 $style. 为 def_m_style.
+                String updatedClass = dynamicClass.replace("$style.", "def_m_style.");
+                if (!updatedClass.equals(dynamicClass)) {
+                    element.attr(":class", updatedClass);
+                }
+            }
         }
     }
 
@@ -319,7 +329,8 @@ public class VueTemplate {
             }
         }
 
-        return "    $style: " + GSON.toJson(styleObject) + ",\n";
+
+        return " const   all_styles = " + GSON.toJson(styleObject) + ";\n";
     }
 
 
