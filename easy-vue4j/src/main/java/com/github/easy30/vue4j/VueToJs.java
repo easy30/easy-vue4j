@@ -2,6 +2,7 @@ package com.github.easy30.vue4j;
 
 
 import com.github.easy30.vue4j.object.TemplateResult;
+import com.github.easy30.vue4j.util.VueGlobal;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -144,7 +145,7 @@ public class VueToJs {
             insertCode.append(setupScript).append("\n");
             insertCode.append("    }\n");
         }else if(vueTemplateResult.getHasModuleStyle()){
-            insertCode.append("    setup() {\n return { $style} }\n");
+            insertCode.append("    setup() {\n return { " + VueGlobal.DEFAULT_MODULE_NAME + "} }\n");
         }
 
         int bracePos = matcher.start(1);
@@ -169,7 +170,7 @@ public class VueToJs {
             // 将 defineExpose({...}) 替换为 return {...};
             String returnStatement = !style?
                     "return " + exposeArgs + ";"
-                    :"return { ..." + exposeArgs + ", ...all_styles };";
+                    :"return { ..." + exposeArgs + ", ..." + VueGlobal.ALL_STYLES_NAME + " };";
             return matcher.replaceAll(returnStatement);
         }
         return setupCode;

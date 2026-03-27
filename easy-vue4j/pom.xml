@@ -7,6 +7,12 @@
     <version>1.0.0</version>
     <name>easy-vue4j</name>
     <url>http://maven.apache.org</url>
+    
+    <properties>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>junit</groupId>
@@ -27,14 +33,12 @@
             <artifactId>javax.servlet-api</artifactId>
             <version>4.0.1</version>
             <scope>provided</scope>
-            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
             <version>6.0.0</version>
             <scope>provided</scope>
-            <optional>true</optional>
         </dependency>
         
         <dependency>
@@ -71,22 +75,22 @@
     </dependencies>
     
     <profiles>
-        <!-- 默认使用 Jakarta EE (Spring Boot 3.x+) -->
+        <!-- 默认使用 Java EE (Spring Boot 2.x 及更早版本，兼容 Java 8) -->
         <profile>
-            <id>jakarta</id>
+            <id>javax</id>
             <activation>
                 <activeByDefault>true</activeByDefault>
             </activation>
             <properties>
-                <servlet.api.version>jakarta</servlet.api.version>
+                <servlet.api.version>javax</servlet.api.version>
             </properties>
         </profile>
         
-        <!-- 使用 Java EE (Spring Boot 2.x 及更早版本) -->
+        <!-- 使用 Jakarta EE (Spring Boot 3.x+，需要 Java 11+) -->
         <profile>
-            <id>javax</id>
+            <id>jakarta</id>
             <properties>
-                <servlet.api.version>javax</servlet.api.version>
+                <servlet.api.version>jakarta</servlet.api.version>
             </properties>
         </profile>
     </profiles>

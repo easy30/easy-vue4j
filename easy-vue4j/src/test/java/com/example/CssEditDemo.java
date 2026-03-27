@@ -1,10 +1,9 @@
-package com.github.easy30.vue4j;
+package com.example;
 
 import com.helger.css.decl.*;
 import com.helger.css.reader.CSSReader;
 import com.helger.css.writer.CSSWriter;
 
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.List;
 

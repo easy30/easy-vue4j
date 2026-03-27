@@ -1,6 +1,7 @@
 package com.github.easy30.vue4j;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.*;
 import javax.servlet.http.HttpServletRequest;
@@ -20,19 +21,25 @@ public class VueFilter implements Filter {
     /**
      * Vue 文件编码，默认 UTF-8
      */
-    private  String charset = "UTF-8";
+    private  String charset ;
 
-    VueCache vueCache = new VueCache();
+    private VueCache vueCache ;
+    private String  vueExt;
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 从初始化参数中读取编码配置
-        String configCharset = filterConfig.getInitParameter("charset");
-        if (configCharset != null && !configCharset.trim().isEmpty()) {
-            this.charset = configCharset.trim();
-            log.info("VueFilter initialized with custom charset: {}", this.charset);
-        } else {
-            log.info("VueFilter initialized with default charset: {}", this.charset);
-        }
+        charset = filterConfig.getInitParameter("charset");
+        if(StringUtils.isBlank(charset)) charset= "UTF-8";
+
+        String root=filterConfig.getInitParameter("resourceRoot");
+
+        String reload= filterConfig.getInitParameter("reload");
+        if(StringUtils.isBlank(reload)) reload="1";
+
+        vueExt=filterConfig.getInitParameter("vueExt");
+        if(StringUtils.isBlank(vueExt)) vueExt=".vue";
+
+        vueCache = new VueCache(root,Integer.parseInt(reload),vueExt);
     }
 
 
@@ -48,18 +55,17 @@ public class VueFilter implements Filter {
             // 获取文件名
             String filename = servletPath.substring(servletPath.lastIndexOf('/') + 1);
             // 尝试带缓存的转换
-            byte[] content = vueCache.get(filename, servletPath,charset);
+            byte[] content = vueCache.getContent(filename, servletPath,charset);
 
             if (content != null) {
                 // 设置 Content-Type
-                response.setContentType("application/javascript");
-                response.setCharacterEncoding(charset);
+                if(filename.endsWith(vueExt)) {
+                    response.setContentType("application/javascript");
+                    response.setCharacterEncoding(charset);
+                }
                 response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
                 response.setHeader("Pragma", "no-cache");
                 response.setHeader("Expires", "0");
-                // 写入转换后的内容
-
-                //response.setContentLength(content.length);
                 response.getOutputStream().write(content);
                 response.getOutputStream().flush();
 

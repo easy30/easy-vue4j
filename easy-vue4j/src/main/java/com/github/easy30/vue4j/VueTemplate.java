@@ -1,7 +1,7 @@
 package com.github.easy30.vue4j;
 
-import com.github.easy30.vue4j.object.ProcessedCss;
 import com.github.easy30.vue4j.object.TemplateResult;
+import com.github.easy30.vue4j.util.VueGlobal;
 import com.helger.css.decl.*;
 import com.helger.css.reader.CSSReader;
 import com.helger.css.writer.CSSWriter;
@@ -87,7 +87,7 @@ public class VueTemplate {
 
             if (module) {
                  moduleName = styleElement.attr("module");
-                if (StringUtils.isBlank(moduleName)) moduleName="def_m_style";
+                if (StringUtils.isBlank(moduleName)) moduleName=VueGlobal.DEFAULT_MODULE_NAME;
 
                 hasModule = true;
             }
@@ -271,7 +271,7 @@ public class VueTemplate {
             if (element.hasAttr(":class")) {
                 String dynamicClass = element.attr(":class");
                 // 替换所有的 $style. 为 def_m_style.
-                String updatedClass = dynamicClass.replace("$style.", "def_m_style.");
+                String updatedClass = dynamicClass.replace("$style.", VueGlobal.DEFAULT_MODULE_NAME + ".");
                 if (!updatedClass.equals(dynamicClass)) {
                     element.attr(":class", updatedClass);
                 }
@@ -330,7 +330,7 @@ public class VueTemplate {
         }
 
 
-        return " const   all_styles = " + GSON.toJson(styleObject) + ";\n";
+        return " const   " + VueGlobal.ALL_STYLES_NAME + " = " + GSON.toJson(styleObject) + ";\n";
     }
 
 
