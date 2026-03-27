@@ -14,7 +14,7 @@
         <relativePath/>
     </parent>
 
-    <name>vue4j-demo</name>
+    <name>easy-vue4j-demo</name>
     <url>http://maven.apache.org</url>
     <dependencies>
         <dependency>
