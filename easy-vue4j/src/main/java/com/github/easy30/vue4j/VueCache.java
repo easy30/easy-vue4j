@@ -18,15 +18,14 @@ public class VueCache {
     private final ConcurrentHashMap<String, CacheContent> cache = new ConcurrentHashMap<>();
 
     private String root;
-    private int reload;
     private boolean isResource;
     private String vueExt;
     /**
      *
-     * @param root  缺省是classpath:/static ; 文件路径: /root/web ; 资源路径:  classpath:/static/web
-     * @param reload  0 表示不重新加载; 1表示修改后重新加载 ;2每次都重新加载
+     * @param root  缺省是 classpath:/static ; 文件路径：/root/web ; 资源路径：classpath:/static/web
+     * @param vueExt  Vue 文件扩展名
      */
-    public VueCache(String root, int reload,String vueExt){
+    public VueCache(String root, String vueExt){
         if(StringUtils.isBlank(root)) {
             log.info("set default resource path: /static");
             isResource=true;
@@ -36,7 +35,6 @@ public class VueCache {
             root = root.substring(10);
         }
         this.root = root;
-        this.reload = reload;
         this.vueExt=vueExt;
 
     }
@@ -46,31 +44,31 @@ public class VueCache {
      *
      * @param filename    资源文件名
      * @param servletPath 资源路径
-     * @return 转换后的 ByteArrayResource 对象
+     * @param charset     字符编码
+     * @param needReload  是否需要热更新（true=检查文件变化，false=使用缓存）
+     * @return CacheContent 对象（包含内容和最后修改时间）
      * @throws IOException 当读取资源或转换失败时抛出
      */
-    public byte[] getContent(String filename, String servletPath, String charset) throws IOException {
+    public CacheContent getContent(String filename, String servletPath, String charset, boolean needReload) throws IOException {
         BaseResource resource =  isResource?  new ClassPathResource(root+ servletPath)
                 : new FileResource(new File(root, servletPath));
-        if(reload!=2) {
-            // 检查缓存
-            CacheContent  cacheContent= cache.get(servletPath);
-            long lastModified=-1 ;
-            if (cacheContent != null) {
-                if(reload==0) return   cacheContent.getContent();
-                lastModified = resource.getLastModified();
-                if (!hasChanged(cacheContent, lastModified)) {
-                    log.debug("Cache hit for Vue file: {}", filename);
-                    return cacheContent.getContent();
-                }
+
+        // 检查缓存
+        CacheContent  cacheContent= cache.get(servletPath);
+        long lastModified=-1 ;
+        if (cacheContent != null) {
+            if(!needReload) return cacheContent;
+            lastModified = resource.getLastModified();
+            if (!hasChanged(cacheContent, lastModified)) {
+                log.debug("Cache hit for Vue file: {}", filename);
+                return cacheContent;
             }
-           byte[] bytes= getContent(resource,filename,charset);
-            cacheContent = new CacheContent(bytes, lastModified);
-            cache.put(servletPath, cacheContent);
-            return bytes;
-        }else {
-            return getContent(resource,filename,charset);
         }
+        byte[] bytes= getContent(resource,filename,charset);
+        if(bytes==null)return null;
+        cacheContent = new CacheContent(bytes, lastModified);
+        cache.put(servletPath, cacheContent);
+        return cacheContent;
 
 
     }
@@ -78,6 +76,7 @@ public class VueCache {
     private byte[] getContent( BaseResource resource  ,String filename,String charset ) throws IOException{
         // 读取文件内容
         byte[] bytes=resource.getContent();
+        if(bytes==null)return null;
         String source = new String(bytes, charset);
 
         // 调用转换器转换为 JS

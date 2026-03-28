@@ -1,14 +1,18 @@
 package com.github.easy30.vue4j;
 
 import com.github.easy30.vue4j.util.PathMatcher;
+import com.github.easy30.vue4j.util.VueGlobal;
+import com.github.easy30.vue4j.util.resource.CacheContent;
 import jakarta.servlet.http.*;
 import lombok.extern.slf4j.Slf4j;
 
 import jakarta.servlet.*;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.Properties;
 
 
@@ -62,7 +66,13 @@ public class VueJakartaFilter implements Filter {
      */
     private String filterExclude;
 
+    /**
+     * ServletContext（用于获取 MIME Type）
+     */
+    private ServletContext servletContext;
+
     private VueCache vueCache;
+
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 1. 从 FilterConfig 读取环境配置
@@ -73,7 +83,7 @@ public class VueJakartaFilter implements Filter {
         log.info("VueJakartaFilter initialized with env: {}", env);
 
         // 2. 读取 easy-vue4j.properties 配置文件
-        Properties config = loadConfig();
+        Properties config = VueGlobal.loadProperties("easy-vue4j.properties");
 
         // 3. 解析基础配置（从配置文件读取）
         charset = getConfigValue(config, "charset", "UTF-8");
@@ -99,28 +109,10 @@ public class VueJakartaFilter implements Filter {
         log.info("  - filterExclude: {}", filterExclude);
 
         // 6. 初始化 VueCache（不再需要 reload 参数，由我们控制缓存策略）
-        // 固定传入 1（热更新模式），实际是否检查由 doFilter 中的 shouldReload 决定
-        vueCache = new VueCache(resourceRoot, 1, vueExt);
-    }
+        vueCache = new VueCache(resourceRoot, vueExt);
 
-    /**
-     * 加载配置文件（使用 UTF-8 编码）
-     */
-    private Properties loadConfig() {
-        Properties props = new Properties();
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream("easy-vue4j.properties")) {
-            if (is != null) {
-                // 使用 UTF-8 编码读取配置文件
-                java.io.Reader reader = new java.io.InputStreamReader(is, java.nio.charset.StandardCharsets.UTF_8);
-                props.load(reader);
-                log.info("Loaded easy-vue4j.properties successfully with UTF-8 encoding");
-            } else {
-                log.warn("easy-vue4j.properties not found, using defaults");
-            }
-        } catch (IOException e) {
-            log.error("Failed to load easy-vue4j.properties", e);
-        }
-        return props;
+        // 7. 保存 ServletContext 引用
+        this.servletContext = filterConfig.getServletContext();
     }
 
     /**
@@ -130,7 +122,6 @@ public class VueJakartaFilter implements Filter {
         String value = config.getProperty(key);
         return StringUtils.isNotBlank(value) ? value : defaultValue;
     }
-
 
     @Override
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
@@ -163,33 +154,38 @@ public class VueJakartaFilter implements Filter {
             response.setHeader("Pragma", "no-cache");
             response.setHeader("Expires", "0");
             log.debug("Hot reload enabled for: {}", servletPath);
-        } else {
-            // 第三方库或生产环境：启用缓存
-            response.setHeader("Cache-Control", "max-age=3600");
-            response.setDateHeader("Expires", System.currentTimeMillis() + 3600000);
-            log.debug("Cache enabled for: {}", servletPath);
         }
 
         try {
             // 4. 获取文件名
             String filename = servletPath.substring(servletPath.lastIndexOf('/') + 1);
 
-            // 5. 尝试带缓存的转换
-            byte[] content = vueCache.getContent(filename, servletPath, charset);
+            // 5. 尝试带缓存的转换（根据 needReload 决定是否检查文件变化）
+            CacheContent cacheContent = vueCache.getContent(filename, servletPath, charset, needReload);
 
-            if (content != null) {
-                // 6. 设置正确的 Content-Type
+            //存在则处理, 不存在则走 filterChain.doFilter
+            if (cacheContent != null) {
+                // 6. 设置 Last-Modified 头（如果有最后修改时间）
+                long lastModified = cacheContent.getLastModified();
+                if (lastModified > 0) {
+                    response.setDateHeader("Last-Modified", lastModified);
+                }
+
+                // 7. 检查 If-Modified-Since 头，实现 304 缓存
+                long ifModifiedSince = request.getDateHeader("If-Modified-Since");
+                if (ifModifiedSince == lastModified) {
+                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                    log.debug("Resource not modified (304): {}", servletPath);
+                    return;
+                }
+
+                // 8. 设置正确的 Content-Type
                 setContentType(response, filename);
                 response.setCharacterEncoding(charset);
-                response.getOutputStream().write(content);
+                response.getOutputStream().write(cacheContent.getContent());
                 response.getOutputStream().flush();
 
-                log.debug("Served file: {} (reload={})", servletPath, needReload);
-                return;
-            } else {
-                // 文件不存在，返回 404
-                log.debug("File not found: {}", servletPath);
-                response.sendError(HttpServletResponse.SC_NOT_FOUND, "File not found: " + servletPath);
+                log.debug("Served file: {} (reload={}, lastModified={})", servletPath, needReload, lastModified);
                 return;
             }
 
@@ -217,15 +213,17 @@ public class VueJakartaFilter implements Filter {
             return true; // 在 include 中，需要热更新
         }
 
-        // 3. 使用默认值：dev 环境热更新，prod 环境不热更新
-        return "dev".equals(env);
+
+        return false;
     }
 
     /**
      * 设置正确的 Content-Type
      */
     private void setContentType(HttpServletResponse response, String filename) {
-        if (filename.endsWith(".vue") || filename.endsWith(".js") || filename.endsWith(".mjs")) {
+        // 如果容器无法识别，使用默认映射
+        if (filename.endsWith(".vue") || filename.endsWith(".js") ||
+                filename.endsWith(".mjs") || filename.endsWith(".ts")) {
             response.setContentType("application/javascript");
         } else if (filename.endsWith(".html")) {
             response.setContentType("text/html");
@@ -234,11 +232,15 @@ public class VueJakartaFilter implements Filter {
         } else if (filename.endsWith(".json")) {
             response.setContentType("application/json");
         } else {
-            // 默认类型
-            response.setContentType("application/octet-stream");
+            String contentType = servletContext.getMimeType(filename);
+            if (contentType != null) {
+                response.setContentType(contentType);
+            } else
+                // 最后兜底：使用 octet-stream
+                response.setContentType("application/octet-stream");
         }
-    }
 
+    }
 
 
     @Override
