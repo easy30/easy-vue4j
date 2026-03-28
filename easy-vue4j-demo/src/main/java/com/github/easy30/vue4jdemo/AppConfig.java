@@ -14,14 +14,18 @@ public class AppConfig implements WebMvcConfigurer {
     public FilterRegistrationBean<VueJakartaFilter> vueFilterRegistrationBean() {
         FilterRegistrationBean<VueJakartaFilter> registrationBean = new FilterRegistrationBean<>();
         registrationBean.setFilter(new VueJakartaFilter());
-        registrationBean.addUrlPatterns("*.vue","*.html");
+        // 拦截所有请求，由 Filter 内部判断是否处理
+        registrationBean.addUrlPatterns("/*");
         registrationBean.setOrder(1); // 确保在其他过滤器之前执行
-        registrationBean.addInitParameter("reload","1");
-        registrationBean.addInitParameter("resourceRoot","/Users/apple/cyber/easy-vue4j/easy-vue4j-demo/src/main/resources/static");
+        
+        // 环境配置通过 init-parameter 传入
+        registrationBean.addInitParameter("env", "dev");
+        
+        // charset、resourceRoot、vueExt 等参数现在从 easy-vue4j.properties 读取
+        // 如果需要覆盖配置文件，可以在这里添加
+        // registrationBean.addInitParameter("charset", "UTF-8");
+        // registrationBean.addInitParameter("resourceRoot", "classpath:/static");
+        
         return registrationBean;
     }
-
-
-
-
 }
