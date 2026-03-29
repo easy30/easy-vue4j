@@ -64,6 +64,7 @@ public class VueCache {
                 return cacheContent;
             }
         }
+        lastModified = resource.getLastModified();
         byte[] bytes= getContent(resource,filename,charset);
         if(bytes==null)return null;
         cacheContent = new CacheContent(bytes, lastModified);

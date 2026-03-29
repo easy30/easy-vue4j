@@ -16,6 +16,12 @@ public class AppConfig implements WebMvcConfigurer {
         registrationBean.setFilter(new VueJakartaFilter());
         // 拦截所有请求，由 Filter 内部判断是否处理
         registrationBean.addUrlPatterns("/*");
+       /* registrationBean.addUrlPatterns("*.css");
+        registrationBean.addUrlPatterns("*.vue");
+        registrationBean.addUrlPatterns("*.js");
+        registrationBean.addUrlPatterns("*.mjs");
+        registrationBean.addUrlPatterns("*.ts");
+        registrationBean.addUrlPatterns("*.html");*/
         registrationBean.setOrder(1); // 确保在其他过滤器之前执行
         
         // 环境配置通过 init-parameter 传入

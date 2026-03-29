@@ -86,17 +86,23 @@ public class VueJakartaFilter implements Filter {
         Properties config = VueGlobal.loadProperties("easy-vue4j.properties");
 
         // 3. 解析基础配置（从配置文件读取）
-        charset = getConfigValue(config, "charset", "UTF-8");
-        resourceRoot = getConfigValue(config, "resource.root", null);
-        vueExt = getConfigValue(config, "vue.ext", ".vue");
-        defaultIndex = getConfigValue(config, "default.index", "index.html");
+        charset = config.getProperty( "charset", "UTF-8");
+        vueExt = config.getProperty( "vue.ext", ".vue");
+        defaultIndex = config.getProperty( "default.index", "index.html");
+        
+        // 4. 解析资源根路径：优先读取系统属性，其次配置文件
+        resourceRoot = System.getProperty("vue4j.resource.root");
+        if (resourceRoot==null) {
+            resourceRoot = config.getProperty( "vue4j.resource.root", "/static");
+        }
 
-        // 4. 解析热更新配置（根据环境）
+
+        // 5. 解析热更新配置（根据环境）
         String reloadKeyPrefix = env + ".reload";
         reloadInclude = config.getProperty(reloadKeyPrefix + ".include", "");
         reloadExclude = config.getProperty(reloadKeyPrefix + ".exclude", "");
 
-        // 5. 解析 Filter 排除配置
+        // 6. 解析 Filter 排除配置
         filterExclude = config.getProperty("filter.exclude", "");
 
         log.info("VueJakartaFilter config loaded:");
@@ -108,10 +114,10 @@ public class VueJakartaFilter implements Filter {
         log.info("  - reloadExclude: {}", reloadExclude);
         log.info("  - filterExclude: {}", filterExclude);
 
-        // 6. 初始化 VueCache（不再需要 reload 参数，由我们控制缓存策略）
+        // 7. 初始化 VueCache（不再需要 reload 参数，由我们控制缓存策略）
         vueCache = new VueCache(resourceRoot, vueExt);
 
-        // 7. 保存 ServletContext 引用
+        // 8. 保存 ServletContext 引用
         this.servletContext = filterConfig.getServletContext();
     }
 
@@ -171,13 +177,13 @@ public class VueJakartaFilter implements Filter {
                     response.setDateHeader("Last-Modified", lastModified);
                 }
 
-                // 7. 检查 If-Modified-Since 头，实现 304 缓存
-                long ifModifiedSince = request.getDateHeader("If-Modified-Since");
-                if (ifModifiedSince == lastModified) {
-                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
-                    log.debug("Resource not modified (304): {}", servletPath);
-                    return;
-                }
+//                // 7. 检查 If-Modified-Since 头，实现 304 缓存
+//                long ifModifiedSince = request.getDateHeader("If-Modified-Since");
+//                if (ifModifiedSince == lastModified) {
+//                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+//                    log.debug("Resource not modified (304): {}", servletPath);
+//                    return;
+//                }
 
                 // 8. 设置正确的 Content-Type
                 setContentType(response, filename);

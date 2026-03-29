@@ -24,6 +24,7 @@ public class VueGlobal {
     public static final String ALL_STYLES_NAME = "all_styles_ae3dc";
 
 
+
     public String   getBlankToDefault(String s, String def){
         return StringUtils.isNotBlank(s)?s.trim():def;
     }
