@@ -12,7 +12,8 @@ public class CssEditDemo {
         String cssText = "body , .table-container th { background: red; color: white; } ";
         
         CascadingStyleSheet styleSheet = CSSReader.readFromString(
-                cssText
+                cssText,
+                com.helger.css.ECSSVersion.LATEST
         );
 
         for (int i = 0; i < styleSheet.getRuleCount(); i++) {

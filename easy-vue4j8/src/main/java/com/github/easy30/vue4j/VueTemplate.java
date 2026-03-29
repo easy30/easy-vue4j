@@ -145,7 +145,7 @@ public class VueTemplate {
      */
     private String processCss(String cssContent, boolean scoped, boolean module, String moduleName,Map<String, String> moduleClassMapping) {
         try {
-            CascadingStyleSheet cssParsed = CSSReader.readFromString(cssContent);
+            CascadingStyleSheet cssParsed = CSSReader.readFromString(cssContent, com.helger.css.ECSSVersion.LATEST);
 
             if (cssParsed == null) {
                 return cssContent;
