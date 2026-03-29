@@ -44,7 +44,7 @@
         </dependency>
         <dependency>
             <groupId>com.github.easy30</groupId>
-            <artifactId>easy-vue4j</artifactId>
+            <artifactId>easy-vue4j8</artifactId>
             <version>1.0.0</version>
         </dependency>
         <dependency>
