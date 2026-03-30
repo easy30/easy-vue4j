@@ -63,6 +63,11 @@ public class VueFilter implements Filter {
     private String filterExclude;
 
     /**
+     * 是否排除没有扩展名的路径（默认 true）
+     */
+    private boolean excludeNoExt;
+
+    /**
      * ServletContext（用于获取 MIME Type）
      */
     private ServletContext servletContext;
@@ -72,9 +77,10 @@ public class VueFilter implements Filter {
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 1. 从 FilterConfig 读取环境配置
-        env = filterConfig.getInitParameter("env");
+        env = filterConfig.getInitParameter("vue4j.env");
         if (StringUtils.isBlank(env)) {
-            env = "dev";
+            env=System.getProperty("vue4j.env");
+            if (StringUtils.isBlank(env))  throw new ServletException("vue4j.env is required");
         }
         log.info("VueJakartaFilter initialized with env: {}", env);
 
@@ -101,7 +107,12 @@ public class VueFilter implements Filter {
         // 6. 解析 Filter 排除配置
         filterExclude = config.getProperty("filter.exclude", "");
 
-        log.info("VueJakartaFilter config loaded:");
+        // 7. 解析是否排除无扩展名路径（默认 true）
+        excludeNoExt = Boolean.parseBoolean(
+            config.getProperty("filter.exclude-no-ext", "true")
+        );
+
+        log.info("VueFilter config loaded:");
         log.info("  - charset: {}", charset);
         log.info("  - resourceRoot: {}", resourceRoot);
         log.info("  - vueExt: {}", vueExt);
@@ -109,6 +120,7 @@ public class VueFilter implements Filter {
         log.info("  - reloadInclude: {}", reloadInclude);
         log.info("  - reloadExclude: {}", reloadExclude);
         log.info("  - filterExclude: {}", filterExclude);
+        log.info("  - excludeNoExt: {}", excludeNoExt);
 
         // 7. 初始化 VueCache（不再需要 reload 参数，由我们控制缓存策略）
         vueCache = new VueCache(resourceRoot, vueExt);
@@ -139,7 +151,14 @@ public class VueFilter implements Filter {
             log.debug("Redirecting root path to: {}", servletPath);
         }
 
-        // 1. 检查是否是 Filter 排除项（图片、字体等）
+        // 1. 检查是否没有扩展名，根据配置决定是否排除
+        if (excludeNoExt && !hasExtension(servletPath)) {
+            log.debug("No extension found and excludeNoExt=true, passing to next filter: {}", servletPath);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 2. 检查是否是 Filter 排除项（图片、字体等）
         if (PathMatcher.matches(filterExclude, servletPath)) {
             log.debug("Resource excluded by filter, passing to next filter: {}", servletPath);
             filterChain.doFilter(request, response);
@@ -217,6 +236,20 @@ public class VueFilter implements Filter {
 
 
         return false;
+    }
+
+    /**
+     * 判断路径是否包含文件扩展名
+     * @param path URL 路径
+     * @return true 表示有扩展名，false 表示没有扩展名（可能是 API 接口）
+     */
+    private boolean hasExtension(String path) {
+        // 获取最后一个 / 之后的部分（文件名）
+        String filename = path.substring(path.lastIndexOf('/') + 1);
+        
+        // 如果文件名中包含 . ，则认为有扩展名
+        // 例如：main.js -> true, user/api -> false
+        return filename.contains(".");
     }
 
     /**

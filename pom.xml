@@ -1,0 +1,30 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.github.easy30</groupId>
+    <artifactId>easy-vue4j-modules</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>easy-vue4j-modules</name>
+    
+    <distributionManagement>
+        <repository>
+            <id>internal-releases</id>
+            <name>Local Release Repository</name>
+            <url>http://192.168.20.191:8081/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>internal-snapshots</id>
+            <name>Local Snapshot Repository</name>
+            <url>http://192.168.20.191:8081/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+    
+    <modules>
+        <module>easy-vue4j</module>
+        <module>easy-vue4j-java8-demo</module>
+        <module>easy-vue4j-demo</module>
+    </modules>
+ 
+</project>

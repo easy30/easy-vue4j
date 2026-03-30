@@ -1,58 +1,100 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    
     <groupId>com.github.easy30</groupId>
     <artifactId>easy-vue4j</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.0</version>
-    <name>easy-vue4j-jakarta</name>
-    <description>easy-vue4j Jakarta EE version (requires Java 11+)</description>
+    <version>1.0.0-SNAPSHOT</version>
+    <name>easy-vue4j</name>
+    <url>http://maven.apache.org</url>
     
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
     </properties>
-    
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven.compiler.plugin.version}</version>
-                <configuration>
-                    <source>11</source>
-                    <target>11</target>
-                    <release>11</release>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-    
     <dependencies>
-        <!-- 依 赖 easy-vue4j 基 础 模 块 -->
         <dependency>
-            <groupId>com.github.easy30</groupId>
-            <artifactId>easy-vue4j8</artifactId>
-            <version>1.0.0</version>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>3.8.1</version>
+            <scope>test</scope>
         </dependency>
-            
-        <!-- Jakarta Servlet API (Spring Boot 3.x) -->
-        <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-            <version>6.0.0</version>
-            <scope>provided</scope>
-        </dependency>
-            
-        <!-- Lombok (需 要 显 式 声 明，因 为 父 模 块 是 provided) -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.42</version>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>4.0.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.20.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.19.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.16</version>
+        </dependency>
+        <dependency>
+            <!-- jsoup HTML parser library @ https://jsoup.org/ -->
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.22.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.helger</groupId>
+            <artifactId>ph-css</artifactId>
+            <version>6.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.13.1</version>
+        </dependency>
     </dependencies>
+    
+
+    <distributionManagement>
+        <repository>
+            <id>internal-releases</id>
+            <name>Local Release Repository</name>
+            <url>http://192.168.20.191:8081/repository/maven-releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>internal-snapshots</id>
+            <name>Local Snapshot Repository</name>
+            <url>http://192.168.20.191:8081/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.18.1</version>
+                <configuration>
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
