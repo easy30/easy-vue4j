@@ -82,7 +82,7 @@ public class VueFilter implements Filter {
             env=System.getProperty("vue4j.env");
             if (StringUtils.isBlank(env))  throw new ServletException("vue4j.env is required");
         }
-        log.info("VueJakartaFilter initialized with env: {}", env);
+        log.info("Vue Filter initialized with env: {}", env);
 
         // 2. 读取 easy-vue4j.properties 配置文件
         Properties config = VueGlobal.loadProperties("easy-vue4j.properties");
@@ -112,15 +112,15 @@ public class VueFilter implements Filter {
             config.getProperty("filter.exclude-no-ext", "true")
         );
 
-        log.info("VueFilter config loaded:");
+        log.info("Vue Filter config loaded:");
         log.info("  - charset: {}", charset);
-        log.info("  - resourceRoot: {}", resourceRoot);
-        log.info("  - vueExt: {}", vueExt);
-        log.info("  - defaultIndex: {}", defaultIndex);
-        log.info("  - reloadInclude: {}", reloadInclude);
-        log.info("  - reloadExclude: {}", reloadExclude);
-        log.info("  - filterExclude: {}", filterExclude);
-        log.info("  - excludeNoExt: {}", excludeNoExt);
+        log.info("  - vue4j.resource.root: {}", resourceRoot);
+        log.info("  - vue.ext: {}", vueExt);
+        log.info("  - default.index: {}", defaultIndex);
+        log.info("  - reload.include: {}", reloadInclude);
+        log.info("  - reload.exclude: {}", reloadExclude);
+        log.info("  - filter.exclude: {}", filterExclude);
+        log.info("  - filter.exclude-no-ext: {}", excludeNoExt);
 
         // 7. 初始化 VueCache（不再需要 reload 参数，由我们控制缓存策略）
         vueCache = new VueCache(resourceRoot, vueExt);
