@@ -64,7 +64,7 @@
 
 <script>
 import { ref, reactive } from 'vue';
-// 导入 TypeScript 转换后的 API（使用绝对路径确保被 Filter 拦截）
+// 导入 TypeScript 转换后的 API（使用绝对路径）
 import { demoApi } from '/api-demo.ts';
 
 export default {

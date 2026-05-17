@@ -3,6 +3,7 @@ package com.github.easy30.vue4j;
 import com.github.easy30.vue4j.util.PathMatcher;
 import com.github.easy30.vue4j.util.VueGlobal;
 import com.github.easy30.vue4j.util.resource.CacheContent;
+import com.github.easy30.vue4j.util.resource.ClassPathResource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import jakarta.servlet.*;
@@ -73,13 +74,15 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
 
     private VueCache vueCache;
 
+    private String filterClientJsPath;
+
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 1. 从 FilterConfig 读取环境配置
         env = filterConfig.getInitParameter("vue4j.env");
         if (StringUtils.isBlank(env)) {
             env=System.getProperty("vue4j.env");
-            if (StringUtils.isBlank(env))  throw new  ServletException("vue4j.env is required");
+            if (StringUtils.isBlank(env))  throw new ServletException("vue4j.env is required");
         }
         log.info("Vue Filter initialized with env: {}", env);
 
@@ -90,7 +93,7 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
         charset = config.getProperty( "charset", "UTF-8");
         vueExt = config.getProperty( "vue.ext", ".vue");
         defaultIndex = config.getProperty( "default.index", "index.html");
-        
+
         // 4. 解析资源根路径：优先读取系统属性，其次配置文件
         resourceRoot = System.getProperty("vue4j.resource.root");
         if (resourceRoot==null) {
@@ -108,8 +111,10 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
 
         // 7. 解析是否排除无扩展名路径（默认 true）
         excludeNoExt = Boolean.parseBoolean(
-            config.getProperty("filter.exclude-no-ext", "true")
+                config.getProperty("filter.exclude-no-ext", "true")
         );
+
+        filterClientJsPath = config.getProperty("filter.client-js.path", "/client-js");
 
         log.info("Vue Filter config loaded:");
         log.info("  - charset: {}", charset);
@@ -164,6 +169,16 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
             return;
         }
 
+        // 3. client-js 目录是前端静态资源，直接放行，不做转换
+        if (servletPath.startsWith(filterClientJsPath)) {
+            String path= "/client-js/"+  StringUtils.stripStart( servletPath,filterClientJsPath);
+            setContentType(response, path);
+            response.setCharacterEncoding(charset);
+            response.getOutputStream().write( new ClassPathResource(path).getContent());
+            response.getOutputStream().flush();
+            return;
+        }
+
         // 2. 判断是否需要热更新（reload）
         boolean needReload = shouldReload(servletPath);
 
@@ -191,13 +206,13 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
                     response.setDateHeader("Last-Modified", lastModified);
                 }
 
-//                // 7. 检查 If-Modified-Since 头，实现 304 缓存
-//                long ifModifiedSince = request.getDateHeader("If-Modified-Since");
-//                if (ifModifiedSince == lastModified) {
-//                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
-//                    log.debug("Resource not modified (304): {}", servletPath);
-//                    return;
-//                }
+                // 7. 检查 If-Modified-Since 头，实现 304 缓存
+                long ifModifiedSince = request.getDateHeader("If-Modified-Since");
+                if (ifModifiedSince == lastModified) {
+                    response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+                    log.debug("Resource not modified (304): {}", servletPath);
+                    return;
+                }
 
                 // 8. 设置正确的 Content-Type
                 setContentType(response, filename);
@@ -245,7 +260,7 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
     private boolean hasExtension(String path) {
         // 获取最后一个 / 之后的部分（文件名）
         String filename = path.substring(path.lastIndexOf('/') + 1);
-        
+
         // 如果文件名中包含 . ，则认为有扩展名
         // 例如：main.js -> true, user/api -> false
         return filename.contains(".");

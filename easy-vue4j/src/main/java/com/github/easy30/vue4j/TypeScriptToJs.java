@@ -146,7 +146,7 @@ public class TypeScriptToJs {
             //  Object output = engine.eval("Babel.transform(input, { presets: ['es2015'] }).code", bindings);
             String transformScript =
                 "var result = Babel.transform(input, {" +
-                "presets: ['typescript','es2015']," +
+                "presets: ['typescript', ['es2015', { modules: false }]]," +
                 "plugins: [" +
                 "['proposal-decorators', { legacy: true }]," +
                 "['transform-class-properties', { loose: true }]" +
