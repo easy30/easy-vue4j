@@ -3,6 +3,7 @@ package com.github.easy30.vue4j;
 import com.github.easy30.vue4j.util.PathMatcher;
 import com.github.easy30.vue4j.util.VueGlobal;
 import com.github.easy30.vue4j.util.resource.CacheContent;
+import com.github.easy30.vue4j.util.resource.ClassPathResource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -74,6 +75,8 @@ public class VueFilter implements Filter {
 
     private VueCache vueCache;
 
+    private String filterClientJsPath;
+
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 1. 从 FilterConfig 读取环境配置
@@ -111,6 +114,8 @@ public class VueFilter implements Filter {
         excludeNoExt = Boolean.parseBoolean(
             config.getProperty("filter.exclude-no-ext", "true")
         );
+
+        filterClientJsPath = config.getProperty("filter.client-js.path", "/client-js");
 
         log.info("Vue Filter config loaded:");
         log.info("  - charset: {}", charset);
@@ -162,6 +167,16 @@ public class VueFilter implements Filter {
         if (PathMatcher.matches(filterExclude, servletPath)) {
             log.debug("Resource excluded by filter, passing to next filter: {}", servletPath);
             filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 3. client-js 目录是前端静态资源，直接放行，不做转换
+        if (servletPath.startsWith(filterClientJsPath)) {
+           String path= "/client-js/"+  StringUtils.stripStart( servletPath,filterClientJsPath);
+            setContentType(response, path);
+            response.setCharacterEncoding(charset);
+            response.getOutputStream().write( new ClassPathResource(path).getContent());
+            response.getOutputStream().flush();
             return;
         }
 

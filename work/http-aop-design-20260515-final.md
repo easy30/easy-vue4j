@@ -22,12 +22,12 @@
 
 ### 3. 核心 JS 文件命名规范
 
-| 原文件 | 存放目录 | 新文件名 | 说明 |
-|-------|---------|---------|------|
-| `httpApi.ts` | `src/main/resources/core-js/` | `http-aop.js` | AOP 装饰器核心：`@api/@post/@get/@json/@form/@defaultBody` |
-| `http.js` | `src/main/resources/core-js/` | `http-axios.js` | axios 适配器，实际发起 HTTP 请求 |
+| 原文件               | 存放目录 | 新文件名 | 说明 |
+|-------------------|---------|---------|------|
+| `work/httpApi.ts` | `src/main/resources/core-js/` | `http-aop.js` | AOP 装饰器核心：`@api/@post/@get/@json/@form/@defaultBody` |
+| `work/http.js`    | `src/main/resources/core-js/` | `http-axios.js` | axios 适配器，实际发起 HTTP 请求 |
 
-### 4. 配置映射（最终版）
+### 4. 配置映射
 
 `easy-vue4j.properties`:
 ```properties
@@ -36,13 +36,12 @@
 # ==========================================
 
 # AOP 核心 JS 浏览器访问路径，直接返回 core-js 目录文件不转换
-http-aop.resource.path=/core-js
+core-js.resource.path=/core-js
 
 # POST 方法无显式 @json/@form 时的默认 body 类型（推荐配置）
 #   可选值:
 #     - json  = 推荐，微服务/前后端分离首选
 #     - form  = 传统表单提交场景
-#     - auto  = 兼容旧行为：单参数json,多参数form
 #   默认不配则内置 = json
 http-aop.body-type=json
 ```
@@ -52,17 +51,15 @@ http-aop.body-type=json
 ## 二、HTTP AOP 装饰器语法规范
 
 ### 优先级决策层次
-1. **方法显式装饰器**：`@json` / `@form` → 最高优先级  
-2. **类级默认配置**：`@defaultBody("json/form")`  
-3. **全局配置**：`http-aop.body-type`  
-4. **内置硬默认**：单参数→JSON，多参数→Form  
+1. **方法显式装饰器**：`@json` / `@form` → 最高优先级
+2. **全局配置**：`http-aop.body-type`
 
 ### Spring 对照表
 
-| Spring Controller | easy-vue4j 写法 | 说明 |
+| Spring Controller | easy-vue4j 写法 | 说明   |
 |------------------|-----------------|------|
 | `@RequestMapping("/api")` | `@api("/api")` | 类级路径前缀 |
-| `@PostMapping` + `@RequestBody` | `@post("/save") save(t)` | 单参数自动 JSON（全局配置默认为 json）|
+| `@PostMapping` + `@RequestBody` | `@post("/save") save(t)` |JSON  |
 | `@PostMapping` + 多参数无注解 | `@post(...) @form` | 打平到 Form body |
 
 ---
@@ -82,53 +79,70 @@ class UserApi {
 class ExternalApi {}
 ```
 
-#### 1.2 `@defaultBody("类型")` - 可选类级默认
+
+
+---
+
+### 2. 方法装饰器语法
+
+#### `@post(path, bodyNames?)`
+| 参数 | 类型 | 必须 | 说明 |
+|-----|------|-----|------|
+| `path` | string | 是 | 请求路径 |
+| `bodyNames` | string | 否 | body 参数名（逗号分隔），不指定时 `@json` 默认取第一个参数 |
+
+#### `@get(path)` / `@post(path)` / `@put(path)` / `@delete(path)`
+请求方法装饰器，参数为请求路径，GET 请求参数自动拼 query string
+
+#### `@json`
+表示请求 body 为 JSON 格式（对应 Spring `@RequestBody`），**不带参数**
+
+#### `@form`
+表示请求 body 为 form 格式（对应传统表单提交），**不带参数**
+
+---
+
+### 3. JSON Body 使用示例
 
 ```typescript
 @api("/api/user")
-@defaultBody("form")         // 类级默认所有 POST 为 Form
 class UserApi {
-    @post("/save") save(user) {}           // 继承类默认 = Form
-    
-    @post("/update") @json("user")          // 显式装饰器优先级更高 = JSON
-    update(user) {}      
+    // ✅ 单参数自动推断为 JSON body
+    @post("/save") save(user: User) {}
+
+    // ✅ 显式指定 body 参数名（第二个参数）
+    @post("/save", "user") save(user, token) {}
+
+    // ✅ @json 不带参数，bodyNames 省略时默认取第一个参数
+    @post("/save") @json save(user) {}
 }
 ```
 
 ---
 
-### 2. JSON Body（对应 Spring `@RequestBody`）
-
-| 使用场景 | 推荐语法 |
-|---------|---------|
-| **单参数自动推断（90% 场景）** | `@post("/save") save(user: User) {}` |
-| **简写第二参 = JSON 参数名** | `@post("/save", "user") save(user, token) {}` |
-| **显式 `@json` 装饰器** | `@post("/save") @json("user") save(user) {}` |
-| **单参数 `@json` 省略参数名** | `@post("/save") @json save(user) {}` |
-
-**示例：**
-```typescript
-@api("/api/user")
-class UserApi {
-    @post("/save") save(user: User) {}              // ✅ 单参数 = JSON body
-    @get("/list") list(page: number, size: number) {} // ✅ GET = 参数到 query
-}
-```
-
----
-
-### 3. FORM Body（对应 Spring 无 `@RequestBody`）
+### 4. FORM Body 使用示例
 
 | 使用场景 | 语法 |
 |---------|------|
 | **全量打平到 Form** | `@post("/save") @form save(a, b, c) {}` |
-| **指定参数打平（逗号分隔）** | `@post("/save") @form("user,dept") save(user, dept, logId) {}` |
+| **指定参数打平** | `@post("/save", "user,dept") @form save(user, dept, logId) {}` |
+
+```typescript
+@api("/api/user")
+class UserApi {
+    // ✅ 所有参数打平到 Form body
+    @post("/save") @form save(name, age, email) {}
+
+    // ✅ 指定哪些参数进 body（用逗号分隔）
+    @post("/update", "name,email") @form save(name, email, logId) {}
+}
+```
 
 **打平规则：** 对象属性递归合并，`http-axios.js` 通过 `qs.stringify` 序列化为 `application/x-www-form-urlencoded`
 
 ---
 
-### 4. 方法体两种支持写法
+### 5. 方法体两种支持写法
 
 ```typescript
 // ========== 手写代码用空对象 ==========

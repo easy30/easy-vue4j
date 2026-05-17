@@ -82,7 +82,11 @@ public class VueCache {
 
         // 调用转换器转换为 JS
         if(filename.endsWith(vueExt)) {
+            // Vue 文件转换
             source = VueToJs.convertVueToJs(source, filename);
+        } else if(filename.endsWith(".ts")) {
+            // TypeScript 文件：使用 Babel 转换（支持装饰器语法）
+            source = TypeScriptToJs.convertTypeScriptToJs(source, filename);
         }
 
         return source.getBytes(charset);

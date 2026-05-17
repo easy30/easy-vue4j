@@ -33,6 +33,12 @@ const routes = [
         meta: { title: 'Hello World' }
     },
     {
+        path: '/api-demo',
+        name: 'ApiDemo',
+        component: () => import('./api-demo.vue'),
+        meta: { title: 'API 装饰器测试' }
+    },
+    {
         path: '/',
         redirect: '/log-level'
     }

@@ -12,7 +12,9 @@
         "vue": "./vendor/js/vue@3.5.31.esm-browser.js",
         "vue-router": "./vendor/js/vue-router@4.6.4.esm-browser.js",
         "element-plus": "./vendor/js/element-plus@2.13.6.esm-browser.mjs",
-        "axios": "./vendor/js/axios@1.13.6.esm-browser.js"
+        "axios": "./vendor/js/axios@1.13.6.esm-browser.js",
+        "http-aop": "./client-js/http-aop.js",
+        "http-axios": "./client-js/http-axios.js"
       }
     }
     </script>
@@ -64,6 +66,10 @@
                 <el-menu-item index="/hello">
                     <i class="fas fa-tools menu-icon"></i>
                     <span>Hello</span>
+                </el-menu-item>
+                <el-menu-item index="/api-demo">
+                    <i class="fas fa-network-wired menu-icon"></i>
+                    <span>API 装饰器</span>
                 </el-menu-item>
             </el-menu>
         </el-aside>
