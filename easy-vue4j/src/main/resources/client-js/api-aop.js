@@ -1,6 +1,6 @@
 /**
- * easy-vue4j HTTP AOP 装饰器核心
- * 
+ * easy-vue4j API AOP 装饰器核心
+ *
  * 装饰器语法：
  * - @api("/api/prefix")          类级路径前缀
  * - @get(path) / @post(path, bodyNames?) / @put(path) / @delete(path)  方法装饰器
@@ -10,18 +10,22 @@
 
 // 存储类级 api 前缀
 const _apiPrefixMap = new Map();
+// 全局默认 body 类型（可通过 setDefaultBodyType 修改）
+let _defaultBodyType = 'json';
+
+export function setDefaultBodyType(type) {
+    _defaultBodyType = type;
+}
+
 // 存储方法级装饰器配置
 const _methodConfigMap = new Map();
-// 存储默认 body 类型（类级）
-const _defaultBodyTypeMap = new Map();
-
-// 请求发送函数（由 http-axios.js 注入）
+// 请求发送函数（由 api-aop-axios.js 注入）
 let _sendRequest = null;
 
 /**
  * 设置请求发送函数
  */
-export function setSendRequest(fn) {
+export function setRequestHandler(fn) {
     _sendRequest = fn;
 }
 
@@ -82,17 +86,6 @@ export function api(prefix) {
     return function(target) {
         const clazzName = target.name || target.constructor?.name;
         _apiPrefixMap.set(clazzName, prefix);
-        return target;
-    };
-}
-
-/**
- * @defaultBody 类装饰器 - 定义默认 body 类型
- */
-export function defaultBody(type) {
-    return function(target) {
-        const clazzName = target.name || target.constructor?.name;
-        _defaultBodyTypeMap.set(clazzName, type.toLowerCase());
         return target;
     };
 }
@@ -165,9 +158,22 @@ function createMethodDecorator(method) {
                 const hasJson = this.__decoratorFlags?.[configKey]?.json;
                 const hasForm = this.__decoratorFlags?.[configKey]?.form;
                 
-                if (hasJson || (!hasForm && method !== 'get')) {
-                    // JSON body 模式
+                if (hasJson) {
+                    // @json 显式声明
                     isJson = true;
+                } else if (hasForm) {
+                    // @form 显式声明
+                    isJson = false;
+                } else if (method === 'get') {
+                    // GET 无 body
+                    isJson = false;
+                } else {
+                    // 无显式装饰器，使用全局默认
+                    isJson = _defaultBodyType === 'json';
+                }
+
+                if (isJson) {
+                    // JSON body 模式
                     const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
                     
                     if (bodyIndex >= 0 && bodyIndex < args.length) {
@@ -191,35 +197,28 @@ function createMethodDecorator(method) {
                 } else {
                     // Form body 模式
                     isJson = false;
-                    const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
-                    
-                    if (bodyIndex >= 0 && bodyIndex < args.length) {
-                        // 指定了 body 参数
-                        const bodyArg = args[bodyIndex];
-                        if (typeof bodyArg === 'object') {
-                            // 递归打平
-                            data = flattenObject(bodyArg);
-                        } else {
-                            data = { [argNames[bodyIndex]]: bodyArg };
+
+                    if (config.bodyNames) {
+                        // 指定了 body 参数名
+                        const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
+                        if (bodyIndex >= 0 && bodyIndex < args.length) {
+                            const bodyArg = args[bodyIndex];
+                            if (typeof bodyArg === 'object') {
+                                data = flattenObject(bodyArg);
+                            } else {
+                                data = { [argNames[bodyIndex]]: bodyArg };
+                            }
                         }
                     } else {
-                        // 全量打平
+                        // 未指定 bodyNames，全量打平
                         data = flattenObject(convertParams(args, argNames));
-                    }
-                    
-                    // 移除已在 body 中的参数
-                    if (bodyIndex >= 0) {
-                        const bodyParamName = config.bodyNames?.split(',')[0].trim();
-                        if (bodyParamName && params === null) {
-                            // 已经在 flattenObject 中处理了
-                        }
                     }
                 }
                 
                 return _sendRequest({
                     url: fullUrl,
                     method: method,
-                    isJson: isJson,
+                    type: isJson ? 'json' : 'form',
                     params: params,
                     data: data
                 });
@@ -263,19 +262,17 @@ export { del as delete };
  * @json 装饰器 - 标记为 JSON body
  */
 export function json(target, name, descriptor) {
-    const clazz = target.constructor;
-    const clazzName = clazz.name;
+    const clazzName = target.constructor?.name || '';
     const configKey = `${clazzName}.${name}`;
-    
-    // 设置标记
-    if (!this.__decoratorFlags) {
-        this.__decoratorFlags = {};
+
+    if (!target.__decoratorFlags) {
+        target.__decoratorFlags = {};
     }
-    if (!this.__decoratorFlags[configKey]) {
-        this.__decoratorFlags[configKey] = {};
+    if (!target.__decoratorFlags[configKey]) {
+        target.__decoratorFlags[configKey] = {};
     }
-    this.__decoratorFlags[configKey].json = true;
-    
+    target.__decoratorFlags[configKey].json = true;
+
     return descriptor;
 }
 
@@ -283,19 +280,17 @@ export function json(target, name, descriptor) {
  * @form 装饰器 - 标记为 Form body
  */
 export function form(target, name, descriptor) {
-    const clazz = target.constructor;
-    const clazzName = clazz.name;
+    const clazzName = target.constructor?.name || '';
     const configKey = `${clazzName}.${name}`;
-    
-    // 设置标记
-    if (!this.__decoratorFlags) {
-        this.__decoratorFlags = {};
+
+    if (!target.__decoratorFlags) {
+        target.__decoratorFlags = {};
     }
-    if (!this.__decoratorFlags[configKey]) {
-        this.__decoratorFlags[configKey] = {};
+    if (!target.__decoratorFlags[configKey]) {
+        target.__decoratorFlags[configKey] = {};
     }
-    this.__decoratorFlags[configKey].form = true;
-    
+    target.__decoratorFlags[configKey].form = true;
+
     return descriptor;
 }
 

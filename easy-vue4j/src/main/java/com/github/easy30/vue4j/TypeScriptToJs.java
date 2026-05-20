@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * TypeScript + 装饰器语法转换器
  * 
- * 使用 Nashorn 引擎调用 Babel 实现转换
+ * 使用 Rhino 引擎调用 Babel 实现转换
  * 
  * 注意：需要 Java 11+ 才能运行完整功能（支持 ES6+）
  * Java 8 会使用简单的装饰器解析（不做完整 TS 转换）

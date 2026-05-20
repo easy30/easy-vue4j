@@ -13,7 +13,9 @@ public class ClassPathResource implements BaseResource {
   
     public ClassPathResource(String path) throws  IOException{
           fileUrl =   this.getClass().getResource(path);
-
+          if (fileUrl == null) {
+              throw new IOException("Resource not found: " + path);
+          }
     }
 
    
@@ -31,6 +33,9 @@ public class ClassPathResource implements BaseResource {
     private long getLastModified(URL fileUrl) {
         // 获取最后修改时间
         long lastModified = -1;
+        if (fileUrl == null) {
+            return lastModified;
+        }
         String filePath= fileUrl.getFile();
         if (!isJarResource(filePath)) {
             File file = new File(filePath);

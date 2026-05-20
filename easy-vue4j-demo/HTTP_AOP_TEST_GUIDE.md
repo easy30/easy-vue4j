@@ -19,8 +19,8 @@ easy-vue4j/src/main/resources/
 ├── server-js/babel/     # 后端转换引擎
 │   └── babel.min.js
 └── client-js/           # 前端运行时库
-    ├── http-aop.js      # HTTP AOP 装饰器核心
-    └── http-axios.js    # axios 适配器
+    ├── api-aop.js       # API AOP 装饰器核心
+    └── api-aop-axios.js     # axios 适配器
 ```
 
 ## 测试步骤
@@ -125,11 +125,11 @@ JavaScript (ES5 + 装饰器运行时)
 ```
 前端调用 demoApi.saveUser(user)
     ↓
-http-aop.js 拦截（装饰器）
+api-aop.js 拦截（装饰器）
     ↓
 构建请求配置（URL、方法、参数）
     ↓
-http-axios.js 发送请求（axios）
+api-aop-axios.js 发送请求（axios）
     ↓
 Spring Boot Controller 接收
     ↓
@@ -140,8 +140,8 @@ Spring Boot Controller 接收
 
 ### 3. 关键组件
 
-- **http-aop.js**: 提供 `@api`、`@post`、`@get`、`@json`、`@form` 等装饰器
-- **http-axios.js**: 基于 axios 实现实际的 HTTP 请求发送
+- **api-aop.js**: 提供 `@api`、`@post`、`@get`、`@json`、`@form` 等装饰器
+- **api-aop-axios.js**: 基于 axios 实现实际的 HTTP 请求发送，提供 `setup()` 统一初始化配置
 - **TypeScriptToJs**: 后端转换引擎，将 TypeScript 转换为 JavaScript
 - **DemoController**: Spring Boot 后端接口，接收并处理请求
 
@@ -193,4 +193,4 @@ A: 浏览器开发者工具 → Network → 找到 test-api.ts → Response 标�
 A: 支持，Babel 会自动转换为 Promise 链。
 
 **Q: 可以自定义错误处理吗？**
-A: 可以，在 http-axios.js 中配置 axios 拦截器。
+A: 可以，通过 `setup({ onError: handler })` 或直接调用 `setDefaultHeaders()`。

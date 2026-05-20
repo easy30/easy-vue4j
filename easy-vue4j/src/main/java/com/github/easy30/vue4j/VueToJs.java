@@ -69,6 +69,10 @@ public class VueToJs {
         // 处理普通 <script>
         if (scriptElement != null) {
             script = scriptElement.html().trim();
+            // lang="ts" 时转换
+            if ("ts".equals(scriptElement.attr("lang")) && StringUtils.isNotBlank(script)) {
+                script = TypeScriptToJs.convertTypeScriptToJs(script, fullName);
+            }
         }
         if (StringUtils.isBlank(script)) {
             script = "export default { }";
@@ -77,6 +81,10 @@ public class VueToJs {
         // 处理 <script setup>
         if (scriptSetupElement != null) {
             setupScript = scriptSetupElement.html().trim();
+            // lang="ts" 时转换
+            if ("ts".equals(scriptSetupElement.attr("lang")) && StringUtils.isNotBlank(setupScript)) {
+                setupScript = TypeScriptToJs.convertTypeScriptToJs(setupScript, fullName);
+            }
         }
 
 

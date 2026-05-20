@@ -171,7 +171,7 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
 
         // 3. client-js 目录是前端静态资源，直接放行，不做转换
         if (servletPath.startsWith(filterClientJsPath)) {
-            String path= "/client-js/"+  StringUtils.stripStart( servletPath,filterClientJsPath);
+            String path = "/client-js/" + StringUtils.substring(servletPath, filterClientJsPath.length());
             setContentType(response, path);
             response.setCharacterEncoding(charset);
             response.getOutputStream().write( new ClassPathResource(path).getContent());

@@ -13,8 +13,8 @@
         "vue-router": "./vendor/js/vue-router@4.6.4.esm-browser.js",
         "element-plus": "./vendor/js/element-plus@2.13.6.esm-browser.mjs",
         "axios": "./vendor/js/axios@1.13.6.esm-browser.js",
-        "http-aop": "./client-js/http-aop.js",
-        "http-axios": "./client-js/http-axios.js"
+        "api-aop": "./client-js/api-aop.js",
+        "api-aop-axios": "./client-js/api-aop-axios.js"
       }
     }
     </script>
@@ -107,7 +107,7 @@
     import { createApp, ref, computed } from 'vue';
     import { createRouter, createWebHashHistory } from 'vue-router';
     import ElementPlus from 'element-plus';
-    import axios from 'axios';
+    import { setup } from 'api-aop-axios';
 
     // 导入路由配置
     import('./routes.js').then(module => {
@@ -116,6 +116,9 @@
     });
 
     function initApp(routes) {
+        // 初始化 HTTP AOP（注册请求处理器和全局配置）
+        setup({ baseURL: '/', defaultBodyType: 'json' });
+
         // 创建路由
         const router = createRouter({
             history: createWebHashHistory(),
@@ -152,8 +155,8 @@
         app.use(ElementPlus);
         
         // 提供全局变量给 Vue 组件使用
-        app.config.globalProperties.$axios = axios;
-        app.provide('axios', axios);
+        //app.config.globalProperties.$axios = axios;
+        //app.provide('axios', axios);
         
         app.mount('#app');
     }
