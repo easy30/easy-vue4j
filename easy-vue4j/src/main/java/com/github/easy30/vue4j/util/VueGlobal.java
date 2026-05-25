@@ -3,6 +3,7 @@ package com.github.easy30.vue4j.util;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
@@ -50,4 +51,5 @@ public class VueGlobal {
         }
         return props;
     }
+
 }

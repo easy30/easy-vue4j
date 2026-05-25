@@ -270,9 +270,12 @@ public class VueFilter implements Filter {
     /**
      * 设置正确的 Content-Type
      */
+    /**
+     * 设置正确的 Content-Type
+     */
     private void setContentType(HttpServletResponse response, String filename) {
         // 如果容器无法识别，使用默认映射
-        if (filename.endsWith(".vue") || filename.endsWith(".js") ||
+        if (filename.endsWith(vueExt) || filename.endsWith(".js") ||
                 filename.endsWith(".mjs") || filename.endsWith(".ts")) {
             response.setContentType("application/javascript");
         } else if (filename.endsWith(".html")) {
@@ -291,6 +294,7 @@ public class VueFilter implements Filter {
         }
 
     }
+
 
 
     @Override

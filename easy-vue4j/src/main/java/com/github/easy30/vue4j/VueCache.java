@@ -10,6 +10,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+
 @Slf4j
 public class VueCache {
     /**
@@ -20,6 +22,8 @@ public class VueCache {
     private String root;
     private boolean isResource;
     private String vueExt;
+    // 简单正则：匹配 @api 或 @api(
+    private static final Pattern API_DECORATOR_PATTERN = Pattern.compile("@api\\b");
     /**
      *
      * @param root  缺省是 classpath:/static ; 文件路径：/root/web ; 资源路径：classpath:/static/web
@@ -78,18 +82,27 @@ public class VueCache {
         // 读取文件内容
         byte[] bytes=resource.getContent();
         if(bytes==null)return null;
-        String source = new String(bytes, charset);
+        if (filename.endsWith(vueExt) || filename.endsWith(".js") ||
+                filename.endsWith(".mjs") || filename.endsWith(".ts")) {
+            String source = new String(bytes, charset);
+            String  convertSource=null;
+            // 调用转换器转换为 JS
+            if (filename.endsWith(vueExt)) {
+                // Vue 文件转换
+                convertSource = VueToJs.convertVueToJs(source, filename);
+            } else if (filename.endsWith(".ts")) {
+                // TypeScript 文件：使用 Babel 转换（支持装饰器语法）
+                convertSource = TypeScriptToJs.convertTypeScriptToJs(source, filename);
+            } else if (filename.endsWith(".js") || filename.endsWith(".mjs")) {
+                //是否有@api要转换
+                if (source.contains("api-aop") && API_DECORATOR_PATTERN.matcher(source).find()) {
+                    convertSource = TypeScriptToJs.convertTypeScriptToJs(source, filename);
+                }
+            }
+            return convertSource!=null?convertSource.getBytes(charset):bytes;
+        }else  return bytes;
 
-        // 调用转换器转换为 JS
-        if(filename.endsWith(vueExt)) {
-            // Vue 文件转换
-            source = VueToJs.convertVueToJs(source, filename);
-        } else if(filename.endsWith(".ts")) {
-            // TypeScript 文件：使用 Babel 转换（支持装饰器语法）
-            source = TypeScriptToJs.convertTypeScriptToJs(source, filename);
-        }
 
-        return source.getBytes(charset);
     }
 
 

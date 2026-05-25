@@ -7,6 +7,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -50,8 +51,10 @@ public class VueToJs {
      * @throws IOException 当解析 Vue 文件格式错误时抛出（缺少 template 或 script 标签）
      */
     public static String convertVueToJs(String vueContent, String fullName) throws IOException {
-        Document doc = Jsoup.parse(vueContent);
-
+        //Document doc = Jsoup.parse(vueContent);
+        Document doc = Jsoup.parse(vueContent,   Parser.xmlParser());
+        // 设置输出语法为 XML，以确保输出也使用自闭合格式
+        doc.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
         // 生成组件唯一 ID
         String componentId = generateComponentId(fullName);
 

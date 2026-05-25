@@ -3,9 +3,11 @@
  *
  * 前端统一通过此模块导入：
  *
- *   import { setup } from 'api-aop-axios';
+ *   import { setup, api } from 'api-aop-axios';
  *
- *   setup({ baseURL: '/api', headers: { Authorization: 'xxx' } });
+ *   setup({ baseURL: '/api' });
+ *   await api.post('/user/list', { name: 'xxx' });
+ *   await api.req({ url: '/xxx', method: 'post', ... });
  */
 
 import axios from 'axios';
@@ -14,7 +16,6 @@ import { setRequestHandler, setDefaultBodyType } from './api-aop.js';
 // 配置
 let _errorHandler = null;
 let _pathPrefix = '';
-let _defaultHeaders = {};
 
 /**
  * 统一初始化配置（推荐方式）
@@ -22,16 +23,13 @@ let _defaultHeaders = {};
  * @param {Object} options
  * @param {string} [options.baseURL]        API 路径前缀，如 '/api'
  * @param {string} [options.defaultBodyType] 默认 body 类型 'json' | 'form'
- * @param {Object} [options.headers]        默认请求头，如 { Authorization: 'xxx' }
  * @param {Function} [options.onError]      全局错误处理函数
  * @param {number}  [options.timeout]       请求超时时间（ms）
  *
  * 示例：
  *   setup({
- *     baseURL: '/api',
+ *     baseURL: '/',
  *     defaultBodyType: 'json',
- *     headers: { Authorization: 'Bearer ' + token },
- *     onError: (err) => console.error(err)
  *   })
  */
 export function setup(options = {}) {
@@ -40,10 +38,15 @@ export function setup(options = {}) {
 
     if (options.baseURL) _pathPrefix = options.baseURL;
     if (options.defaultBodyType) setDefaultBodyType(options.defaultBodyType);
-    if (options.headers) Object.assign(_defaultHeaders, options.headers);
     if (options.onError) _errorHandler = options.onError;
 }
 
+/**
+ * 获取当前 token（从 localStorage，可自行修改来源）
+ */
+function getToken() {
+    return localStorage.getItem('token') || '';
+}
 
 /**
  * 实际发送请求的函数
@@ -56,8 +59,11 @@ function sendRequest(config) {
         url = _pathPrefix.replace(/\/+$/, '') + '/' + url.replace(/^\/+/, '');
     }
 
-    // 合并默认请求头（方法级 > 全局）
-    const headers = { ..._defaultHeaders, ...config.headers };
+    // 合并请求头：每次动态读取 token
+    const headers = {
+        ...(getToken() ? { Authorization: 'Bearer ' + getToken() } : {}),
+        ...config.headers
+    };
 
     // Form body 序列化
     let data = config.data;
@@ -78,8 +84,6 @@ function sendRequest(config) {
     });
 }
 
-// 注：不再自动注册，由 setup() 统一初始化
-
 /**
  * axios 请求函数
  */
@@ -90,7 +94,6 @@ function request(config) {
 
     // 请求拦截器
     instance.interceptors.request.use(config => {
-        console.log('[HTTP AOP] Request:', config);
         return config;
     }, err => {
         throw new Error(err);
@@ -99,9 +102,7 @@ function request(config) {
     // 响应拦截器
     instance.interceptors.response.use(
         res => {
-            console.log('[HTTP AOP] Response:', res);
             const result = res.data;
-            
             // 如果返回结果有 code 字段，按业务逻辑处理
             if (result.code !== undefined) {
                 if (result.code === 0 || result.code === 200) {
@@ -116,7 +117,10 @@ function request(config) {
             return result;
         },
         err => {
-            console.error('[HTTP AOP] Error:', err);
+            if (err.response?.status === 401) {
+                localStorage.removeItem('token');
+                // 可触发跳登录页
+            }
             if (_errorHandler) _errorHandler(err);
             return Promise.reject(err);
         }
@@ -125,4 +129,32 @@ function request(config) {
     return instance(config);
 }
 
-// request 和 axiosInstance 不导出，由 setup() 统一初始化。
+// ==================== 便捷方法 ====================
+
+function createMethod(method) {
+    return function(url, dataOrConfig, config = {}) {
+        if (method === 'get' || method === 'delete') {
+            // GET/DELETE: 第二个参数是 axios 配置 (params, headers 等)，不是 body
+            return sendRequest({ url, method, ...dataOrConfig, ...config });
+        }
+        return sendRequest({ url, method, data: dataOrConfig, ...config });
+    };
+}
+
+/**
+ * 统一 API 调用对象
+ *
+ * 示例：
+ *   import { api } from 'api-aop-axios';
+ *
+ *   await api.post('/agent/delete', null, { params: { id: 'xxx' } });
+ *   await api.get('/toolDefine/list', { params: { builtin: true } });
+ *   await api.req({ url: '/xxx', method: 'post', data: {...}, params: {...} });
+ */
+export const api = {
+    post: createMethod('post'),
+    get: createMethod('get'),
+    put: createMethod('put'),
+    delete: createMethod('delete'),
+    req: sendRequest
+};

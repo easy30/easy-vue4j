@@ -153,11 +153,6 @@
 
         app.use(router);
         app.use(ElementPlus);
-        
-        // 提供全局变量给 Vue 组件使用
-        //app.config.globalProperties.$axios = axios;
-        //app.provide('axios', axios);
-        
         app.mount('#app');
     }
 </script>
