@@ -1,6 +1,6 @@
 package com.github.easy30.vue4jdemo;
 
-import com.github.easy30.vue4j.VueJakartaFilter;
+import com.github.easy30.vue4j.VueJkFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -11,9 +11,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Slf4j
 public class AppConfig implements WebMvcConfigurer {
     @Bean
-    public FilterRegistrationBean<VueJakartaFilter> vueFilterRegistrationBean() {
-        FilterRegistrationBean<VueJakartaFilter> registrationBean = new FilterRegistrationBean<>();
-        registrationBean.setFilter(new VueJakartaFilter());
+    public FilterRegistrationBean<VueJkFilter> vueFilterRegistrationBean() {
+        FilterRegistrationBean<VueJkFilter> registrationBean = new FilterRegistrationBean<>();
+        registrationBean.setFilter(new VueJkFilter());
         // 拦截所有请求，由 Filter 内部判断是否处理
         registrationBean.addUrlPatterns("/*");
        /* registrationBean.addUrlPatterns("*.css");

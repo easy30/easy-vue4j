@@ -1,5 +1,6 @@
 package com.github.easy30.vue4j;
 
+import com.github.easy30.vue4j.object.ClientException;
 import com.github.easy30.vue4j.util.PathMatcher;
 import com.github.easy30.vue4j.util.VueGlobal;
 import com.github.easy30.vue4j.util.resource.CacheContent;
@@ -8,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
+
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Properties;
 
@@ -20,7 +23,7 @@ import java.util.Properties;
  * @author CyberWater
  */
 @Slf4j
-public class VueJakartaFilter implements jakarta.servlet.Filter {
+public class VueJkFilter implements jakarta.servlet.Filter {
 
     /**
      * 环境配置：dev | prod
@@ -131,6 +134,14 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
 
         // 8. 保存 ServletContext 引用
         this.servletContext = filterConfig.getServletContext();
+
+        // 9. 异步预初始化 TypeScriptToJs 引擎（避免阻塞启动）
+        Thread initThread = new Thread(() -> {
+                TypeScriptToJs.preInitialize();
+        }, "VueJkFilter-TypeScript-Init");
+        initThread.setDaemon(true);
+        initThread.start();
+
     }
 
     /**
@@ -224,8 +235,20 @@ public class VueJakartaFilter implements jakarta.servlet.Filter {
                 return;
             }
 
-        } catch (Exception e) {
+        }
+        catch (FileNotFoundException e){
+            log.debug("File not found: {}", servletPath);
+            response.sendError(HttpServletResponse.SC_NOT_FOUND, "Resource not found: " + servletPath);
+            return;
+        }
+        catch (Exception e) {
             log.error("Error processing file: {}", servletPath, e);
+            if (e instanceof ClientException) {
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
+            } else {
+                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
+            }
+            return;
         }
 
         // 如果处理失败，继续执行过滤器链

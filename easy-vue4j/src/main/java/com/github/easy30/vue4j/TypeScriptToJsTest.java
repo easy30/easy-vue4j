@@ -1,10 +1,5 @@
 package com.github.easy30.vue4j;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-
 /**
  * TypeScriptToJs 转换测试（独立运行）
  */
@@ -44,7 +39,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "test.ts", true);
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "test.ts", true);
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);
@@ -70,7 +65,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "person.ts");
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "person.ts");
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);
@@ -95,7 +90,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "interface.ts");
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "interface.ts");
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);

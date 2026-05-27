@@ -2,8 +2,6 @@ package com.github.easy30.vue4j;
 
 import lombok.extern.slf4j.Slf4j;
 
-import javax.script.Bindings;
-import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -114,8 +112,25 @@ public class TypeScriptToJs {
      * @param filename 文件名（用于错误提示）
      * @return 转换后的 JavaScript 代码
      */
-    public static String convertTypeScriptToJs(String source, String filename) {
-        return convertTypeScriptToJs(source, filename, false);
+    public static String convertJs(String source, String filename) {
+        return convertJs(source, filename, false);
+    }
+
+    /**
+     * 预初始化 ScriptEngine（可在应用启动时调用，避免首次转换时的延迟）
+     * 
+     * @return true 表示初始化成功，false 表示初始化失败
+     */
+    public static boolean preInitialize() {
+        try {
+            log.info("TypeScriptToJs engine initialization started in background");
+            getEngine();
+            log.info("TypeScriptToJs engine pre-initialized successfully");
+            return true;
+        } catch (Exception e) {
+            log.error("TypeScriptToJs engine pre-initialization failed", e);
+            return false;
+        }
     }
 
     /**
@@ -126,7 +141,7 @@ public class TypeScriptToJs {
      * @param enableSourceMap 是否启用 sourceMap（会在结果尾部附加 sourceMap）
      * @return 转换后的 JavaScript 代码
      */
-    public synchronized static String convertTypeScriptToJs(String source, String filename, boolean enableSourceMap) {
+    public synchronized static String convertJs(String source, String filename, boolean enableSourceMap) {
         if (source == null || source.isEmpty()) {
             return source;
         }
@@ -146,7 +161,7 @@ public class TypeScriptToJs {
             //  Object output = engine.eval("Babel.transform(input, { presets: ['es2015'] }).code", bindings);
             String transformScript =
                 "var result = Babel.transform(input, {" +
-                "presets: ['typescript', ['es2015', { modules: false }]]," +
+                "presets: ['typescript', ['env', { modules: false }]]," +
                 "plugins: [" +
                 "['proposal-decorators', { legacy: true }]," +
                 "['transform-class-properties', { loose: true }]" +

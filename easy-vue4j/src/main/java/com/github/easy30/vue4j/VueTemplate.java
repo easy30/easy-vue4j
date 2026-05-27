@@ -1,5 +1,6 @@
 package com.github.easy30.vue4j;
 
+import com.github.easy30.vue4j.object.ClientException;
 import com.github.easy30.vue4j.object.TemplateResult;
 import com.github.easy30.vue4j.util.VueGlobal;
 import com.helger.css.decl.*;
@@ -10,6 +11,8 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -24,6 +27,8 @@ import java.util.regex.Pattern;
 public class VueTemplate {
 
     private static final Pattern CLASS_SELECTOR_PATTERN = Pattern.compile("\\.([a-zA-Z_-][a-zA-Z0-9_-]*)");
+
+    private static final Logger log = LoggerFactory.getLogger(VueTemplate.class);
 
     private final String componentId;
     private final String scopedAttribute; // "data-v-" + componentId
@@ -69,7 +74,7 @@ public class VueTemplate {
 
         List<Element> styleElements = doc.select("style");
         if (styleElements.isEmpty()) {
-            String template = templateElement.html().trim();
+            String template = unescapeVueTemplate(templateElement.html()).trim();
             // 没有 style，只返回 template
             return new TemplateResult("    template: `" + escape(template) + "`,\n", null,false);
         }
@@ -113,8 +118,14 @@ public class VueTemplate {
         }
 
 
-        // 重新获取处理后的 HTML
-        String template = templateElement.html().trim();
+        // 重新获取处理后的 HTML（需取消转义 &gt; 和 &amp;，保留 &quot; 防止属性值引号冲突）
+        String template = unescapeVueTemplate(templateElement.html()).trim();
+
+        // 检查：模板使用了 $style 但没有 <style module> → 常见错误，抛 DisplayException 让前端可见
+        if (!hasModule && template.contains("$style.")) {
+            throw new ClientException("模板中使用了 $style 但缺少 <style module>。"
+                    + "如需使用 CSS Modules 请将 <style scoped> 改为 <style module>。");
+        }
 
         // 构建返回结果
         StringBuilder result = new StringBuilder();
@@ -339,6 +350,18 @@ public class VueTemplate {
                 .replace("\\", "\\\\")
                 .replace("`", "\\`")
                 .replace("${", "\\${");
+    }
+
+    /**
+     * 取消 Jsoup html() 输出的部分 HTML 转义，确保 Vue 模板编译器能正确解析。
+     * Jsoup 在输出属性值时会将 &gt; 和 &amp; 转为 &amp;gt; 和 &amp;amp;，
+     * 但 Vue 的模板编译器不识别这些实体，导致箭头函数 (=&gt;) 和逻辑与 (&amp;&amp;) 失效。
+     * 注意保留 &amp;quot; 不反转，防止属性值中的双引号破坏属性结构。
+     */
+    private static String unescapeVueTemplate(String html) {
+        return html
+                .replace("&gt;", ">")
+                .replace("&amp;", "&");
     }
 
 

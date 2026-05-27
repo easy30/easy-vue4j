@@ -39,6 +39,12 @@ const routes = [
         meta: { title: 'API 装饰器测试' }
     },
     {
+        path: '/setup-test',
+        name: 'SetupTest',
+        component: () => import('./views/setup-test.vue'),
+        meta: { title: 'Setup 测试' }
+    },
+    {
         path: '/',
         redirect: '/log-level'
     }

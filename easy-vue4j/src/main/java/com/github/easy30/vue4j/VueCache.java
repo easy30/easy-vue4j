@@ -92,11 +92,11 @@ public class VueCache {
                 convertSource = VueToJs.convertVueToJs(source, filename);
             } else if (filename.endsWith(".ts")) {
                 // TypeScript 文件：使用 Babel 转换（支持装饰器语法）
-                convertSource = TypeScriptToJs.convertTypeScriptToJs(source, filename);
+                convertSource = TypeScriptToJs.convertJs(source, filename);
             } else if (filename.endsWith(".js") || filename.endsWith(".mjs")) {
                 //是否有@api要转换
                 if (source.contains("api-aop") && API_DECORATOR_PATTERN.matcher(source).find()) {
-                    convertSource = TypeScriptToJs.convertTypeScriptToJs(source, filename);
+                    convertSource = TypeScriptToJs.convertJs(source, filename);
                 }
             }
             return convertSource!=null?convertSource.getBytes(charset):bytes;

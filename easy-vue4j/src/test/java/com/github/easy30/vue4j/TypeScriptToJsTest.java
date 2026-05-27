@@ -31,7 +31,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "test.ts", true);
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "test.ts", true);
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);
@@ -58,7 +58,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "person.ts");
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "person.ts");
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);
@@ -84,7 +84,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "interface.ts");
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "interface.ts");
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);
@@ -109,7 +109,7 @@ public class TypeScriptToJsTest {
         System.out.println(tsCode);
         System.out.println();
         
-        String jsCode = TypeScriptToJs.convertTypeScriptToJs(tsCode, "async.ts");
+        String jsCode = TypeScriptToJs.convertJs(tsCode, "async.ts");
         
         System.out.println("========== 输出 JavaScript ==========");
         System.out.println(jsCode);

@@ -3,6 +3,7 @@ package com.github.easy30.vue4j.util.resource;
 import org.apache.commons.io.IOUtils;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -14,7 +15,7 @@ public class ClassPathResource implements BaseResource {
     public ClassPathResource(String path) throws  IOException{
           fileUrl =   this.getClass().getResource(path);
           if (fileUrl == null) {
-              throw new IOException("Resource not found: " + path);
+              throw new FileNotFoundException("classpath:" + path);
           }
     }
 

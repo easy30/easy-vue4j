@@ -10,6 +10,7 @@ import org.apache.commons.lang3.StringUtils;
 import javax.servlet.*;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Properties;
 
@@ -132,6 +133,13 @@ public class VueFilter implements Filter {
 
         // 8. 保存 ServletContext 引用
         this.servletContext = filterConfig.getServletContext();
+
+        // 9. 异步预初始化 TypeScriptToJs 引擎（避免阻塞启动）
+        Thread initThread = new Thread(() -> {
+            TypeScriptToJs.preInitialize();
+        }, "VueJkFilter-TypeScript-Init");
+        initThread.setDaemon(true);
+        initThread.start();
     }
 
     /**
@@ -225,8 +233,15 @@ public class VueFilter implements Filter {
                 return;
             }
 
-        } catch (Exception e) {
+        } catch (FileNotFoundException e){
+            log.debug("File not found: {}", servletPath);
+            response.sendError(HttpServletResponse.SC_NOT_FOUND, "Resource not found: " + servletPath);
+            return;
+        }
+        catch (Exception e) {
             log.error("Error processing file: {}", servletPath, e);
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal server error");
+            return;
         }
 
         // 如果处理失败，继续执行过滤器链
