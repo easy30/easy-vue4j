@@ -16,6 +16,7 @@ import { setRequestHandler, setDefaultBodyType } from './api-aop.js';
 // 配置
 let _errorHandler = null;
 let _pathPrefix = '';
+let _defaultHeaders = () => ({});
 
 /**
  * 统一初始化配置（推荐方式）
@@ -23,6 +24,7 @@ let _pathPrefix = '';
  * @param {Object} options
  * @param {string} [options.baseURL]        API 路径前缀，如 '/api'
  * @param {string} [options.defaultBodyType] 默认 body 类型 'json' | 'form'
+ * @param {Function} [options.defaultHeaders] 返回默认请求头对象的函数
  * @param {Function} [options.onError]      全局错误处理函数
  * @param {number}  [options.timeout]       请求超时时间（ms）
  *
@@ -30,6 +32,7 @@ let _pathPrefix = '';
  *   setup({
  *     baseURL: '/',
  *     defaultBodyType: 'json',
+ *     defaultHeaders: () => ({ cai_token: localStorage.getItem('cai_token') })
  *   })
  */
 export function setup(options = {}) {
@@ -39,13 +42,7 @@ export function setup(options = {}) {
     if (options.baseURL) _pathPrefix = options.baseURL;
     if (options.defaultBodyType) setDefaultBodyType(options.defaultBodyType);
     if (options.onError) _errorHandler = options.onError;
-}
-
-/**
- * 获取当前 token（从 localStorage，可自行修改来源）
- */
-function getToken() {
-    return localStorage.getItem('token') || '';
+    if (options.defaultHeaders) _defaultHeaders = options.defaultHeaders;
 }
 
 /**
@@ -59,9 +56,10 @@ function sendRequest(config) {
         url = _pathPrefix.replace(/\/+$/, '') + '/' + url.replace(/^\/+/, '');
     }
 
-    // 合并请求头：每次动态读取 token
+    // 合并请求头：每次动态读取默认头
+    const customHeaders = typeof _defaultHeaders === 'function' ? _defaultHeaders() : {};
     const headers = {
-        ...(getToken() ? { Authorization: 'Bearer ' + getToken() } : {}),
+        ...customHeaders,
         ...config.headers
     };
 
@@ -117,10 +115,6 @@ function request(config) {
             return result;
         },
         err => {
-            if (err.response?.status === 401) {
-                localStorage.removeItem('token');
-                // 可触发跳登录页
-            }
             if (_errorHandler) _errorHandler(err);
             return Promise.reject(err);
         }
