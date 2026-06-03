@@ -19,6 +19,8 @@ export function setDefaultBodyType(type) {
 
 // 存储方法级装饰器配置
 const _methodConfigMap = new Map();
+// 存储 @json/@form 标记（新格式下先于 createMethodDecorator 执行）
+const _typeFlagMap = new Map();
 // 请求发送函数（由 api-aop-axios.js 注入）
 let _sendRequest = null;
 
@@ -81,10 +83,12 @@ function flattenObject(obj, prefix = '', result = {}) {
 
 /**
  * @api 类装饰器 - 定义路径前缀
+ * 兼容旧格式（Babel）：(target) → 返回 target
+ * 兼容新格式（esbuild）：(target, context) → 返回 target
  */
 export function api(prefix) {
-    return function(target) {
-        const clazzName = target.name || target.constructor?.name;
+    return function(target, context) {
+        const clazzName = context && context.kind ? context.name : (target.name || target.constructor?.name);
         _apiPrefixMap.set(clazzName, prefix);
         return target;
     };
@@ -129,34 +133,45 @@ function getBodyParamIndex(argNames, bodyNames) {
 
 /**
  * 通用方法装饰器工厂
+ * 兼容旧格式（Babel）：(target, name, descriptor) → 返回 descriptor 对象
+ * 兼容新格式（esbuild）：(target, context) → 返回 descriptor 对象
  */
 function createMethodDecorator(method) {
     return function(path, bodyNames) {
         return function(target, name, descriptor) {
+            // 兼容新旧格式：新格式无 descriptor 参数，而是 name 是 context 对象
+            const ctx = descriptor === undefined ? name : null;
+            const methodName = ctx ? ctx.name : name;
+            if (ctx) {
+                descriptor = { value: target[methodName], writable: true, enumerable: false, configurable: true };
+            }
             const func = descriptor.value;
-            const clazz = target.constructor;
-            const clazzName = clazz.name;
-            
-            // 存储配置
-            const configKey = `${clazzName}.${name}`;
+            // 新格式下 target 是函数体，class 名在调用时才知（从 this 取）
+            const configKey = ctx ? '__' + methodName : target.constructor.name + '.' + name;
+            // 从 _typeFlagMap 读取 @json/@form 标记
+            // 新格式下 esbuild 从右往左执行，@json/@form 先于此处执行，所以标志位已就绪
+            const flag = _typeFlagMap.get(methodName);
             _methodConfigMap.set(configKey, {
                 method: method,
                 path: path,
-                bodyNames: bodyNames || null
+                bodyNames: bodyNames || null,
+                json: flag === 'json' || undefined,
+                form: flag === 'form' || undefined
             });
-            
+
             const newFunc = function(...args) {
                 const argNames = getArgumentNames(func);
-                const config = _methodConfigMap.get(configKey);
-                const fullUrl = getFullUrl(clazz, config.path);
+                const realKey = ctx ? this.constructor.name + '.' + methodName : configKey;
+                const config = _methodConfigMap.get(realKey) || _methodConfigMap.get(configKey);
+                const fullUrl = getFullUrl(this.constructor, config.path);
                 
                 let data = null;
                 let params = null;
                 let isJson = false;
                 
-                // 检查是否有 @json/@form 装饰器标记
-                const hasJson = this.__decoratorFlags?.[configKey]?.json;
-                const hasForm = this.__decoratorFlags?.[configKey]?.form;
+                // 检查是否有 @json/@form 装饰器标记（存于 _methodConfigMap 中）
+                const hasJson = config.json;
+                const hasForm = config.form;
                 
                 if (hasJson) {
                     // @json 显式声明
@@ -173,26 +188,29 @@ function createMethodDecorator(method) {
                 }
 
                 if (isJson) {
-                    // JSON body 模式
-                    const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
-                    
-                    if (bodyIndex >= 0 && bodyIndex < args.length) {
-                        data = args[bodyIndex];
-                    }
-                    
-                    // 其他参数放入 query
-                    const otherParams = {};
-                    for (let i = 0; i < args.length; i++) {
-                        if (i !== bodyIndex) {
-                            if (typeof args[i] === 'object') {
-                                Object.assign(otherParams, args[i]);
-                            } else {
-                                otherParams[argNames[i]] = args[i];
+                    // JSON body 模式：未指定 bodyNames 时，整个第一个参数作为 body
+                    if (config.bodyNames) {
+                        const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
+                        if (bodyIndex >= 0 && bodyIndex < args.length) {
+                            data = args[bodyIndex];
+                        }
+                        // 其他参数放入 query
+                        const otherParams = {};
+                        for (let i = 0; i < args.length; i++) {
+                            if (i !== bodyIndex) {
+                                if (typeof args[i] === 'object') {
+                                    Object.assign(otherParams, args[i]);
+                                } else {
+                                    otherParams[argNames[i]] = args[i];
+                                }
                             }
                         }
-                    }
-                    if (Object.keys(otherParams).length > 0) {
-                        params = otherParams;
+                        if (Object.keys(otherParams).length > 0) {
+                            params = otherParams;
+                        }
+                    } else {
+                        // 未指定 bodyNames，第一个参数作为整个 JSON body
+                        data = args.length > 0 ? args[0] : null;
                     }
                 } else {
                     // Form body 模式
@@ -224,10 +242,7 @@ function createMethodDecorator(method) {
                 });
             };
             
-            return {
-                ...descriptor,
-                value: newFunc
-            };
+            return ctx ? newFunc : { ...descriptor, value: newFunc };
         };
     };
 }
@@ -261,37 +276,28 @@ export { del as delete };
 /**
  * @json 装饰器 - 标记为 JSON body
  */
+/**
+ * @json 装饰器 - 标记为 JSON body
+ * 注意：esbuild 新格式下装饰器从右往左执行，@json 先于 @post/@get 执行，
+ * 所以不能直接操作 _methodConfigMap（那时还不存在），改为存入 _typeFlagMap，
+ * 由 createMethodDecorator 在创建配置时读取。
+ */
 export function json(target, name, descriptor) {
-    const clazzName = target.constructor?.name || '';
-    const configKey = `${clazzName}.${name}`;
-
-    if (!target.__decoratorFlags) {
-        target.__decoratorFlags = {};
-    }
-    if (!target.__decoratorFlags[configKey]) {
-        target.__decoratorFlags[configKey] = {};
-    }
-    target.__decoratorFlags[configKey].json = true;
-
-    return descriptor;
+    const ctx = descriptor === undefined ? name : null;
+    const methodName = ctx ? ctx.name : name;
+    _typeFlagMap.set(methodName, 'json');
+    return ctx ? target : descriptor;
 }
 
 /**
  * @form 装饰器 - 标记为 Form body
+ * 同 @json，标记存入 _typeFlagMap，由 createMethodDecorator 读取。
  */
 export function form(target, name, descriptor) {
-    const clazzName = target.constructor?.name || '';
-    const configKey = `${clazzName}.${name}`;
-
-    if (!target.__decoratorFlags) {
-        target.__decoratorFlags = {};
-    }
-    if (!target.__decoratorFlags[configKey]) {
-        target.__decoratorFlags[configKey] = {};
-    }
-    target.__decoratorFlags[configKey].form = true;
-
-    return descriptor;
+    const ctx = descriptor === undefined ? name : null;
+    const methodName = ctx ? ctx.name : name;
+    _typeFlagMap.set(methodName, 'form');
+    return ctx ? target : descriptor;
 }
 
 // ==================== 测试工具 ====================
