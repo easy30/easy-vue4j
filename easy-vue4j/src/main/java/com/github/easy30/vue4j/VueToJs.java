@@ -2,6 +2,7 @@ package com.github.easy30.vue4j;
 
 
 import com.github.easy30.vue4j.object.TemplateResult;
+import com.github.easy30.vue4j.util.ScriptUtil;
 import com.github.easy30.vue4j.util.VueGlobal;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
@@ -227,14 +228,14 @@ public class VueToJs {
      * 先通过 Babel (preset-env) 将代码转换为 ES5，确保 Rhino 能正确解析。
      * Babel 会注入 helper（如 _typeof、_objectSpread 等），通过交叉比对原始代码过滤。
      */
+    private static String extractSetupExportsWithRhino0(String setupCode, boolean style) {
+        return extractSetupExportsWithRhino(setupCode, style);
+    }
+
     private static String extractSetupExportsWithRhino(String setupCode, boolean style) {
         try {
-            // Babel 转换为 ES5，处理所有 Rhino 不支持的语法
-            String transpiled = TypeScriptToJs.convertJs(setupCode, "setup.vue", false);
-            // 从 Babel 输出中提取所有顶层声明
-            Set<String> exports = parseExportsFromJs(transpiled);
+            Set<String> exports = ScriptUtil.parseTopLevelNames(setupCode);
 
-            // 过滤掉 Babel 注入的 helper（不在原始代码中出现的名字即为 helper）
             exports.removeIf(name ->
                     !Pattern.compile("\\b" + Pattern.quote(name) + "\\b").matcher(setupCode).find()
             );
@@ -250,11 +251,18 @@ public class VueToJs {
         }
     }
 
+
+
+
     /**
      * 用 Rhino AST 解析 JS 代码，提取顶层变量和函数名
      */
     private static Set<String> parseExportsFromJs(String code) {
         CompilerEnvirons compilerEnv = new CompilerEnvirons();
+        compilerEnv.setLanguageVersion(Context.VERSION_ES6);  // 加上这行
+        compilerEnv.setAllowMemberExprAsFunctionName(true); // 允许某些 ES6 语法
+        compilerEnv.setStrictMode(true);         // 强制严格模式（ES6 模块等需要）
+        compilerEnv.setRecordingComments(false); // 可选，减少干扰
         Parser parser = new Parser(compilerEnv);
         AstRoot root = parser.parse(code, null, 1);
 
@@ -273,6 +281,73 @@ public class VueToJs {
             }
         }
         return exports;
+    }
+
+    public static void main(String[] args) {
+        String code=
+
+                 "const importExcel = (e) => __async(null, null, function* () {\n" +
+                         "  const file = e.target.files[0];\n" +
+                         "  if (!file) return;\n" +
+                         "  e.target.value = \"\";\n" +
+                         "  const reader = new FileReader();\n" +
+                         "  reader.onload = (evt) => __async(null, null, function* () {\n" +
+                         "    var _a, _b, _c, _d;\n" +
+                         "    try {\n" +
+                         "      const wb = XLSX.read(evt.target.result, { type: \"array\" });\n" +
+                         "      const nodeSheet = wb.Sheets[\"\\u8282\\u70B9\"];\n" +
+                         "      const edgeSheet = wb.Sheets[\"\\u5173\\u7CFB\"];\n" +
+                         "      if (!nodeSheet) {\n" +
+                         "        ElMessage.error('Excel \\u4E2D\\u672A\\u627E\\u5230\"\\u8282\\u70B9\"\\u5DE5\\u4F5C\\u8868');\n" +
+                         "        return;\n" +
+                         "      }\n" +
+                         "      const nodeRows = XLSX.utils.sheet_to_json(nodeSheet);\n" +
+                         "      const edgeRows = edgeSheet ? XLSX.utils.sheet_to_json(edgeSheet) : [];\n" +
+                         "      const nodes = [];\n" +
+                         "      for (const row of nodeRows) {\n" +
+                         "        const name = (row[\"\\u540D\\u79F0\"] || \"\").trim();\n" +
+                         "        if (!name) continue;\n" +
+                         "        nodes.push({\n" +
+                         "          name,\n" +
+                         "          description: row[\"\\u63CF\\u8FF0\"] || \"\",\n" +
+                         "          nodeType: row[\"\\u7C7B\\u578B\"] || \"entity\"\n" +
+                         "        });\n" +
+                         "      }\n" +
+                         "      const edges = [];\n" +
+                         "      for (const row of edgeRows) {\n" +
+                         "        const fromName = (row[\"\\u6E90\\u8282\\u70B9\"] || \"\").trim();\n" +
+                         "        const toName = (row[\"\\u76EE\\u6807\\u8282\\u70B9\"] || \"\").trim();\n" +
+                         "        if (!fromName || !toName) continue;\n" +
+                         "        edges.push({\n" +
+                         "          fromName,\n" +
+                         "          toName,\n" +
+                         "          type: row[\"\\u5173\\u7CFB\\u7C7B\\u578B\"] || \"\\u5173\\u8054\",\n" +
+                         "          description: row[\"\\u63CF\\u8FF0\"] || \"\"\n" +
+                         "        });\n" +
+                         "      }\n" +
+                         "      const result = yield knowledgeGraphApi.batchImport({ nodes, edges });\n" +
+                         "      const nc = (_a = result == null ? void 0 : result.nodeCount) != null ? _a : 0;\n" +
+                         "      const ec = (_b = result == null ? void 0 : result.edgeCount) != null ? _b : 0;\n" +
+                         "      const nf = (_c = result == null ? void 0 : result.nodeFailCount) != null ? _c : 0;\n" +
+                         "      const ef = (_d = result == null ? void 0 : result.edgeFailCount) != null ? _d : 0;\n" +
+                         "      let msg = `\\u5BFC\\u5165\\u5B8C\\u6210\\uFF1A\\u65B0\\u5EFA ${nc} \\u4E2A\\u8282\\u70B9\\uFF0C${ec} \\u6761\\u5173\\u7CFB`;\n" +
+                         "      if (nf || ef) msg += `\\uFF1B\\u5931\\u8D25 \\u8282\\u70B9${nf} \\u5173\\u7CFB${ef}\\uFF08\\u8BE6\\u60C5\\u89C1\\u540E\\u7AEF\\u65E5\\u5FD7\\uFF09`;\n" +
+                         "      ElMessage.success(msg);\n" +
+                         "      refreshGraph();\n" +
+                         "    } catch (err) {\n" +
+                         "      ElMessage.error(\"\\u5BFC\\u5165\\u5931\\u8D25\\uFF1A\" + (err.message || \"\\u6587\\u4EF6\\u89E3\\u6790\\u9519\\u8BEF\"));\n" +
+                         "    }\n" +
+                         "  });\n" +
+                         "  reader.readAsArrayBuffer(file);\n" +
+                         "});\n";
+               // "let resizeStartX = 0;\n" +
+               // "let resizeStartW = 0;"
+             try {
+                 ;
+                 System.out.println(parseExportsFromJs(code));
+             }catch (Exception e){
+                 e.printStackTrace();
+             }
     }
 
     /**
@@ -303,6 +378,8 @@ public class VueToJs {
         // rest element (...) 或其他复杂模式直接忽略
     }
 
+    /** 用 Babel.parse（已加载的 Rhino 引擎）解析 ES6 代码，提取顶层变量/函数名 */
+    /** 处理 script 内容，移除 export default 关键字并添加 template 属性 */
     /**
      * 处理 script 内容，移除 export default 关键字并添加 template 属性
      *

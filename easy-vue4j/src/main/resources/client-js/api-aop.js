@@ -6,6 +6,8 @@
  * - @get(path) / @post(path, bodyNames?) / @put(path) / @delete(path)  方法装饰器
  * - @json                         JSON body 格式（不带参数）
  * - @form                         Form body 格式（不带参数）
+ * - @postJson(path, bodyNames?)   POST + JSON body 快捷方式
+ * - @postForm(path, bodyNames?)   POST + Form body 快捷方式
  */
 
 // 存储类级 api 前缀
@@ -49,34 +51,66 @@ function getArgumentNames(fn) {
 }
 
 /**
- * 将参数数组转换为对象
+ * 序列化参数为键值对（用于 form body 和 query）
+ *
+ * 规则：
+ *   基本类型 → key=value
+ *   对象     → 展开第一级，子值递归本规则
+ *   数组     → 按元素展开（同名重复 key）
+ *   子对象   → JSON.stringify
  */
-function convertParams(args, names) {
+function serializeParams(args, names) {
     const ret = {};
     for (let i = 0; i < args.length; i++) {
-        if (args[i] !== null && typeof args[i] === 'object' && !Array.isArray(args[i])) {
-            Object.assign(ret, args[i]);
-        } else if (names[i]) {
-            ret[names[i]] = args[i];
+        const name = names[i];
+        if (!name && typeof args[i] === 'object' && !Array.isArray(args[i])) {
+            // 无名对象参数 → 展开第一级
+            for (const key in args[i]) addValue(ret, key, args[i][key]);
+        } else if (name) {
+            addValue(ret, name, args[i]);
         }
     }
     return ret;
 }
 
+function addValue(ret, key, val) {
+    if (Array.isArray(val)) {
+        // 数组 → 按元素展开（递归）
+        for (const item of val) addValue(ret, key, item);
+    } else if (val !== null && typeof val === 'object') {
+        // 子对象 → JSON.stringify
+        doAdd(ret, key, JSON.stringify(val));
+    } else {
+        if (val != null) doAdd(ret, key, String(val));
+    }
+}
+
+function doAdd(ret, key, val) {
+    if (ret.hasOwnProperty(key)) {
+        if (Array.isArray(ret[key])) ret[key].push(val);
+        else ret[key] = [ret[key], val];
+    } else {
+        ret[key] = val;
+    }
+}
+
 /**
- * 递归打平对象属性
+ * 替换 URL 中的 {param} 为参数值，返回 [新URL, 已消费参数索引数组]
  */
-function flattenObject(obj, prefix = '', result = {}) {
-    for (const key in obj) {
-        const value = obj[key];
-        const newKey = prefix ? `${prefix}.${key}` : key;
-        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-            flattenObject(value, newKey, result);
-        } else {
-            result[newKey] = value;
+function resolvePathParams(url, args, argNames) {
+    const match = url.match(/\{(\w+)\}/g);
+    if (!match) return [url, []];
+    let resolved = url;
+    const consumed = [];
+    for (const m of match) {
+        const key = m.slice(1, -1);
+        const idx = argNames.indexOf(key);
+        if (idx >= 0) {
+            resolved = resolved.replace(m, encodeURIComponent(String(args[idx])));
+            consumed.push(idx);
         }
     }
-    return result;
+    return [resolved, consumed];
 }
 
 // ==================== 装饰器实现 ====================
@@ -143,7 +177,8 @@ function createMethodDecorator(method) {
             const ctx = descriptor === undefined ? name : null;
             const methodName = ctx ? ctx.name : name;
             if (ctx) {
-                descriptor = { value: target[methodName], writable: true, enumerable: false, configurable: true };
+                // 新格式下 target 已经是方法函数自身，target[methodName] 是 undefined
+                descriptor = { value: target, writable: true, enumerable: false, configurable: true };
             }
             const func = descriptor.value;
             // 新格式下 target 是函数体，class 名在调用时才知（从 this 取）
@@ -164,7 +199,10 @@ function createMethodDecorator(method) {
                 const realKey = ctx ? this.constructor.name + '.' + methodName : configKey;
                 const config = _methodConfigMap.get(realKey) || _methodConfigMap.get(configKey);
                 const fullUrl = getFullUrl(this.constructor, config.path);
-                
+                const [resolvedUrl, consumed] = resolvePathParams(fullUrl, args, argNames);
+                const fNames = argNames.filter((_, i) => !consumed.includes(i));
+                const fArgs = args.filter((_, i) => !consumed.includes(i));
+
                 let data = null;
                 let params = null;
                 let isJson = false;
@@ -187,54 +225,41 @@ function createMethodDecorator(method) {
                     isJson = _defaultBodyType === 'json';
                 }
 
+                // 用 fNames/fArgs（已排除路径参数）处理 body/query
+                const useNames = fNames.length > 0 ? fNames : argNames;
+                const useArgs = fNames.length > 0 ? fArgs : args;
+
                 if (isJson) {
-                    // JSON body 模式：未指定 bodyNames 时，整个第一个参数作为 body
                     if (config.bodyNames) {
-                        const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
-                        if (bodyIndex >= 0 && bodyIndex < args.length) {
-                            data = args[bodyIndex];
-                        }
-                        // 其他参数放入 query
-                        const otherParams = {};
-                        for (let i = 0; i < args.length; i++) {
-                            if (i !== bodyIndex) {
-                                if (typeof args[i] === 'object') {
-                                    Object.assign(otherParams, args[i]);
-                                } else {
-                                    otherParams[argNames[i]] = args[i];
-                                }
-                            }
-                        }
-                        if (Object.keys(otherParams).length > 0) {
-                            params = otherParams;
-                        }
+                        const bodyIdx = getBodyParamIndex(useNames, config.bodyNames);
+                        if (bodyIdx >= 0) {
+                            data = useArgs[bodyIdx];
+                            const qn = useNames.filter((_, i) => i !== bodyIdx);
+                            const qa = useArgs.filter((_, i) => i !== bodyIdx);
+                            if (qa.length > 0) params = serializeParams(qa, qn);
+                        } else { data = useArgs[0]; }
                     } else {
-                        // 未指定 bodyNames，第一个参数作为整个 JSON body
-                        data = args.length > 0 ? args[0] : null;
+                        data = useArgs.length > 0 ? useArgs[0] : null;
                     }
                 } else {
-                    // Form body 模式
                     isJson = false;
-
                     if (config.bodyNames) {
-                        // 指定了 body 参数名
-                        const bodyIndex = getBodyParamIndex(argNames, config.bodyNames);
-                        if (bodyIndex >= 0 && bodyIndex < args.length) {
-                            const bodyArg = args[bodyIndex];
-                            if (typeof bodyArg === 'object') {
-                                data = flattenObject(bodyArg);
-                            } else {
-                                data = { [argNames[bodyIndex]]: bodyArg };
-                            }
+                        const bodyIdx = getBodyParamIndex(useNames, config.bodyNames);
+                        const qn = [], qa = [];
+                        for (let i = 0; i < useArgs.length; i++) {
+                            if (i === bodyIdx) {
+                                const wrap = {}; wrap[useNames[i]] = useArgs[i];
+                                data = serializeParams([wrap], ['']);
+                            } else { qn.push(useNames[i]); qa.push(useArgs[i]); }
                         }
+                        if (qa.length > 0) params = serializeParams(qa, qn);
                     } else {
-                        // 未指定 bodyNames，全量打平
-                        data = flattenObject(convertParams(args, argNames));
+                        data = serializeParams(useArgs, useNames);
                     }
                 }
-                
+
                 return _sendRequest({
-                    url: fullUrl,
+                    url: resolvedUrl || fullUrl,
                     method: method,
                     type: isJson ? 'json' : 'form',
                     params: params,
@@ -272,6 +297,40 @@ export const put = createMethodDecorator('put');
 export const del = createMethodDecorator('delete');
 // 别名
 export { del as delete };
+
+/**
+ * @postJson 快捷装饰器 - POST + JSON body
+ * 等价于 @post(...) + @json
+ */
+export function postJson(path, bodyNames) {
+    return function(target, name, descriptor) {
+        // 先设置 json 标记
+        const ctx = descriptor === undefined ? name : null;
+        const methodName = ctx ? ctx.name : name;
+        _typeFlagMap.set(methodName, 'json');
+        
+        // 再应用 @post 装饰器
+        const postDecorator = createMethodDecorator('post')(path, bodyNames);
+        return postDecorator(target, name, descriptor);
+    };
+}
+
+/**
+ * @postForm 快捷装饰器 - POST + Form body
+ * 等价于 @post(...) + @form
+ */
+export function postForm(path, bodyNames) {
+    return function(target, name, descriptor) {
+        // 先设置 form 标记
+        const ctx = descriptor === undefined ? name : null;
+        const methodName = ctx ? ctx.name : name;
+        _typeFlagMap.set(methodName, 'form');
+        
+        // 再应用 @post 装饰器
+        const postDecorator = createMethodDecorator('post')(path, bodyNames);
+        return postDecorator(target, name, descriptor);
+    };
+}
 
 /**
  * @json 装饰器 - 标记为 JSON body

@@ -23,7 +23,7 @@
 
 | 原文件               | 存放目录                            | 新文件名 | 说明 |
 |-------------------|---------------------------------|---------|------|
-| `work/httpApi.ts` | `src/main/resources/client-js/` | `api-aop.js` | AOP 装饰器核心：`@api/@post/@get/@put/@delete/@json/@form` |
+| `work/httpApi.ts` | `src/main/resources/client-js/` | `api-aop.js` | AOP 装饰器核心：`@api/@post/@get/@put/@delete/@json/@form/@postJson/@postForm` |
 | `work/http.js`    | `src/main/resources/client-js/`   | `api-aop-axios.js` | axios 适配器，实际发起 HTTP 请求 |
 
 ### 4. 配置映射
@@ -59,7 +59,7 @@ http-aop.body-type=json
 |------------------|-----------------|------|
 | `@RequestMapping("/api")` | `@api("/api")` | 类级路径前缀 |
 | `@PostMapping` + `@RequestBody` | `@post("/save") save(t)` | JSON body |
-| `@PostMapping` + 多参数无注解 | `@post(...) @form` | 打平到 Form body |
+| `@PostMapping` + 多参数无注解 | `@post(...) @form` | 参数转 key=value，对象转 JSON 串 |
 
 ### 路径拼接规则
 - `@api` 与方法的 `@post/@get/@put/@delete` 的路径自动拼接
@@ -101,7 +101,7 @@ class ExternalApi {}
 - 无 `@json`/`@form` 时 → 按默认@json或@form方式来处理.
 - 带 `@json` → 指定哪些参数序列化为 JSON body
 - 带 `@form` → 指定哪些参数打平到 Form body
-- **不指定 bodyNames 时**：`@json` 默认取第一个参数作 body；`@form` 将**所有参数**打平
+- **不指定 bodyNames 时**：`@json` 默认取第一个参数作 body；`@form` 将**所有参数**转为 key=value 键值对。参数值为对象/数组时自动 JSON.stringify
 
 #### `@get(path)`
 | 参数 | 类型 | 必须 | 说明 |
@@ -116,6 +116,16 @@ class ExternalApi {}
 
 #### `@form`
 声明请求 body 为 form 格式（对应传统表单提交）。直接写 `@form` 即可，**本身不接收任何参数**，只作为标记
+
+#### `@postJson(path, bodyNames?)` - 快捷装饰器
+POST + JSON body 的快捷方式，等价于 `@post(...) + @json`。
+- 参数与 `@post` 完全相同
+- 自动设置 body 类型为 JSON，无需额外添加 `@json` 装饰器
+
+#### `@postForm(path, bodyNames?)` - 快捷装饰器
+POST + Form body 的快捷方式，等价于 `@post(...) + @form`。
+- 参数与 `@post` 完全相同
+- 自动设置 body 类型为 Form，无需额外添加 `@form` 装饰器
 
 ---
 
@@ -132,6 +142,10 @@ class UserApi {
 
     // ✅ @json 不带参数，bodyNames 省略时默认取第一个参数
     @post("/save") @json save(user) {}
+    
+    // ✅ @postJson 快捷方式（推荐）
+    @postJson("/save") save(user: User) {}
+    @postJson("/save", "user") save(user, token) {}
 }
 ```
 
@@ -139,23 +153,27 @@ class UserApi {
 
 ### 4. FORM Body 使用示例
 
-| 使用场景 | 语法 |
-|---------|------|
-| **全量打平到 Form** | `@post("/save") @form save(a, b, c) {}` |
-| **指定参数打平** | `@post("/save", "user,dept") @form save(user, dept, logId) {}` |
+| 使用场景              | 语法 |
+|-------------------|------|
+| **全量放入body Form** | `@post("/save") @form save(a, b, c) {}` | 生成 `a=值&b=值&c=值` |
+| **指定参数放入body**    | `@post("/save", "user,dept") @form save(user, dept, logId) {}` | 生成 `user=值&dept=值`，logId 忽略 |
 
 ```typescript
 @api("/api/user")
 class UserApi {
-    // ✅ 所有参数打平到 Form body
+    // ✅ 所有参数放入 Form body
     @post("/save") @form save(name, age, email) {}
 
     // ✅ 指定哪些参数进 body（用逗号分隔）
     @post("/update", "name,email") @form save(name, email, logId) {}
+    
+    // ✅ @postForm 快捷方式（推荐）
+    @postForm("/save") save(name, age, email) {}
+    @postForm("/update", "name,email") save(name, email, logId) {}
 }
 ```
 
-**打平规则：** 对象属性递归合并，`api-aop-axios.js` 通过 `qs.stringify` 序列化为 `application/x-www-form-urlencoded`
+**打平规则：** 参数，`api-aop-axios.js` 通过 `qs.stringify` 序列化为 `application/x-www-form-urlencoded`
 
 ---
 
@@ -186,12 +204,6 @@ class UserApi {
     @get("/list") list(page, size) {}
 }
 
-// ========== 工具生成代码推荐 abstract ==========
-@api("/api/user")
-abstract class UserApi {
-    @post("/save") abstract save(user: User): Promise<Result>;
-    @get("/list") abstract list(page: number): Promise<User[]>;
-}
 ```
 
 ---
@@ -223,5 +235,5 @@ abstract class UserApi {
 | 优先级 | 方法装饰器 > 全局配置 > 内置兼容逻辑 |
 | POST 单参数默认行为 | 自动推断为 JSON body（全局默认 = json） |
 | 资源文件 | `resources/client-js/api-aop.js` <br> `resources/client-js/api-aop-axios.js` |
-| JSON/FORM 区分 | `@json` / `@form` 独立装饰器为主 <br> `@post("/url", "param")` 简写为辅 |
-| 方法体写法 | `{}` 或 `abstract class` 均支持 |
+| JSON/FORM 区分 | `@json` / `@form` 独立装饰器为主 <br> `@postJson` / `@postForm` 快捷方式为辅 <br> `@post("/url", "param")` 简写为辅 |
+| 方法体写法 | `{}` |

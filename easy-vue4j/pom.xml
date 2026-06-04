@@ -4,7 +4,7 @@
     <groupId>com.github.easy30</groupId>
     <artifactId>easy-vue4j</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.1-SNAPSHOT</version>
+    <version>1.0.2-SNAPSHOT</version>
     <name>easy-vue4j</name>
     <url>http://maven.apache.org</url>
     

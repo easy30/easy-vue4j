@@ -138,6 +138,7 @@ public class VueJkFilter implements jakarta.servlet.Filter {
         // 9. 异步预初始化 TypeScriptToJs 引擎（避免阻塞启动）
         Thread initThread = new Thread(() -> {
                 TypeScriptToJs.preInitialize();
+                TypeScriptToJs.convertJs("const a=2","test.js");
         }, "VueJkFilter-TypeScript-Init");
         initThread.setDaemon(true);
         initThread.start();
