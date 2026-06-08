@@ -93,7 +93,7 @@ public class ScriptUtil {
     }
 
     /** 用 Acorn 解析 JS/TS AST，提取顶层 const/let/var/function/class 名以及 import 的名称 */
-    public static Set<String> parseTopLevelNames(String code) throws Exception {
+    /*public static Set<String> parseTopLevelNames(String code) throws Exception {
         ScriptEngine eng = getEngine();
         eng.put("input", code);
         String js = "var ast = acorn.parse(input, { sourceType: 'module', ecmaVersion: 2022 });" +
@@ -129,5 +129,5 @@ public class ScriptUtil {
             }
         }
         return names;
-    }
+    }*/
 }

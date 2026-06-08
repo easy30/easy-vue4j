@@ -2,6 +2,7 @@ package com.github.easy30.vue4j;
 
 
 import com.github.easy30.vue4j.object.TemplateResult;
+import com.github.easy30.vue4j.util.AstParser;
 import com.github.easy30.vue4j.util.ScriptUtil;
 import com.github.easy30.vue4j.util.VueGlobal;
 import org.apache.commons.lang3.StringUtils;
@@ -317,8 +318,11 @@ public class VueToJs {
      * @return 处理后的代码（三个宏已被正确处理）
      */
     private static String processSetupScript(String setupCode, boolean style, Set<String> importedNames) {
-        // 0. 使用 Acorn 提取 components: { ... } 中的组件名（如果用户显式写了）
-        Set<String> componentNames = extractComponentNamesWithAcorn(setupCode);
+        // 一次性解析，提取所有需要的信息（替代原来的三次独立解析）
+        AstParser.AstResult astResult = AstParser.parseOnce(setupCode);
+        
+        // 0. 获取 components: { ... } 中的组件名（如果用户显式写了）
+        Set<String> componentNames = new HashSet<>(astResult.getComponentNames());
         
         // 合并 import 的名称到组件名（import 的组件也需要导出）
         if (importedNames != null) {
@@ -334,128 +338,42 @@ public class VueToJs {
         }
 
         // 2. const props = defineProps({...}) -> 提取到 extractedPropsDef，移除语句
-        Matcher pm = DEFINE_PROPS_STMT.matcher(setupCode);
-        if (pm.find()) {
-            int parenStart = pm.end();
-            String args = extractBalancedParenWithAcorn(setupCode, parenStart - 1);
-            if (args != null) {
-                String trimmed = args.trim();
-                if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-                    extractedPropsDef = trimmed.substring(1, trimmed.length() - 1).trim();
-                } else {
-                    extractedPropsDef = trimmed;
-                }
-            }
-            setupCode = removeStatementAt(setupCode, pm.start(), parenStart, args);
+        // 直接从一次解析结果中获取 props 定义（JavaScript端已处理好格式）
+        if (astResult.isHasProps()) {
+            extractedPropsDef = astResult.getPropsDef();
             extractedHasProps = true;
+            // 移除 defineProps 语句，使用原始参数内容计算移除长度
+            Matcher pm = DEFINE_PROPS_STMT.matcher(setupCode);
+            if (pm.find()) {
+                int parenStart = pm.end();
+                setupCode = removeStatementAt(setupCode, pm.start(), parenStart, astResult.getPropsRaw());
+            }
         }
 
         // 3. const emit = defineEmits([...]) -> 提取到 extractedEmitsDef，移除语句
-        Matcher em = DEFINE_EMITS_STMT.matcher(setupCode);
-        if (em.find()) {
-            int parenStart = em.end();
-            String args = extractBalancedParenWithAcorn(setupCode, parenStart - 1);
-            if (args != null) {
-                extractedEmitsDef = args.trim();
-            }
-            setupCode = removeStatementAt(setupCode, em.start(), parenStart, args);
+        // 直接从一次解析结果中获取 emits 定义（JavaScript端已处理好格式）
+        if (astResult.isHasEmits()) {
+            extractedEmitsDef = astResult.getEmitsDef();
             extractedHasEmits = true;
+            // 移除 defineEmits 语句，使用原始参数内容计算移除长度
+            Matcher em = DEFINE_EMITS_STMT.matcher(setupCode);
+            if (em.find()) {
+                int parenStart = em.end();
+                setupCode = removeStatementAt(setupCode, em.start(), parenStart, astResult.getEmitsRaw());
+            }
         }
 
         // 4. 自动提取所有顶层声明，生成 return { ... }（模板绑定）
         //    同时将 components: {...} 中的组件名加入导出
-        return extractSetupExportsWithRhino(setupCode, style, componentNames);
+        //    传递 astResult 避免重复解析
+        return extractSetupExportsWithRhino(setupCode, style, componentNames, astResult);
     }
 
     /**
-     * 使用 Acorn 解析代码，提取 components: { ... } 中的组件名
-     * 支持：const components = { KnowledgeGraphCanvas }
-     *       let components = { Foo, Bar }
+     * 已废弃：使用 AstParser.parseOnce() 替代
+     * 原有的 extractComponentNamesWithAcorn 和 extractBalancedParenWithAcorn 方法
+     * 已合并到 AstParser 类中，实现一次解析多次提取，提升性能
      */
-    private static Set<String> extractComponentNamesWithAcorn(String setupCode) {
-        Set<String> componentNames = new LinkedHashSet<>();
-        try {
-            ScriptEngine eng = ScriptUtil.getEngine();
-            eng.put("input", setupCode);
-            String js = "var ast = acorn.parse(input, { sourceType: 'module', ecmaVersion: 2022 });" +
-                    "var names = [];" +
-                    "for (var i = 0; i < ast.body.length; i++) {" +
-                    "  var node = ast.body[i];" +
-                    "  if (node.type === 'VariableDeclaration') {" +
-                    "    for (var j = 0; j < node.declarations.length; j++) {" +
-                    "      var decl = node.declarations[j];" +
-                    "      if (decl.id && decl.id.type === 'Identifier' && decl.id.name === 'components'" +
-                    "          && decl.init && decl.init.type === 'ObjectExpression') {" +
-                    "        for (var k = 0; k < decl.init.properties.length; k++) {" +
-                    "          var prop = decl.init.properties[k];" +
-                    "          if (prop.type === 'Property' && prop.key) {" +
-                    "            names.push(prop.key.name || prop.key.value);" +
-                    "          } else if (prop.type === 'SpreadElement' && prop.argument) {" +
-                    "            names.push('...' + (prop.argument.name || ''));" +
-                    "          }" +
-                    "        }" +
-                    "      }" +
-                    "    }" +
-                    "  }" +
-                    "}" +
-                    "names.join(',');";
-            Object result = eng.eval(js);
-            if (result != null && result.toString().trim().length() > 0) {
-                for (String n : result.toString().split(",")) {
-                    n = n.trim();
-                    if (!n.isEmpty() && !n.startsWith("...")) {
-                        componentNames.add(n);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("extractComponentNamesWithAcorn failed: {}", e.getMessage());
-        }
-        return componentNames;
-    }
-
-    /**
-     * 使用 Acorn 从指定位置提取平衡括号内容
-     * 比手动 parseBalancedParen 更健壮，支持复杂嵌套和 ES2022 语法
-     */
-    private static String extractBalancedParenWithAcorn(String code, int fromIndex) {
-        if (fromIndex < 0 || fromIndex >= code.length() || code.charAt(fromIndex) != '(') {
-            return extractBalancedParen(code, fromIndex); // 回退到手动解析
-        }
-        try {
-            // 找到对应的函数调用节点
-            ScriptEngine eng = ScriptUtil.getEngine();
-            eng.put("input", code);
-            eng.put("start", fromIndex);
-            String js = "var ast = acorn.parse(input, { sourceType: 'module', ecmaVersion: 2022, onComment: [] });" +
-                    "var result = null;" +
-                    "function findCall(node, pos) {" +
-                    "  if (result) return;" +
-                    "  if (!node) return;" +
-                    "  if (node.type === 'CallExpression' && node.start <= pos && node.end >= pos) {" +
-                    "    if (node.arguments && node.arguments.length > 0) {" +
-                    "      result = input.substring(node.arguments[0].start, node.arguments[0].end);" +
-                    "    }" +
-                    "  }" +
-                    "  for (var key in node) {" +
-                    "    if (key === 'start' || key === 'end' || key === 'type') continue;" +
-                    "    var val = node[key];" +
-                    "    if (Array.isArray(val)) {" +
-                    "      for (var i = 0; i < val.length; i++) findCall(val[i], pos);" +
-                    "    } else if (val && typeof val === 'object' && val.type) {" +
-                    "      findCall(val, pos);" +
-                    "    }" +
-                    "  }" +
-                    "}" +
-                    "for (var i = 0; i < ast.body.length; i++) findCall(ast.body[i], start);" +
-                    "result || '';";
-            Object r = eng.eval(js);
-            return r != null ? r.toString() : extractBalancedParen(code, fromIndex);
-        } catch (Exception e) {
-            log.warn("extractBalancedParenWithAcorn failed: {}, falling back", e.getMessage());
-            return extractBalancedParen(code, fromIndex);
-        }
-    }
 
     /**
      * 从 import 语句中提取导入的名称
@@ -571,23 +489,24 @@ public class VueToJs {
      * Babel 会注入 helper（如 _typeof、_objectSpread 等），通过交叉比对原始代码过滤。
      */
     private static String extractSetupExportsWithRhino0(String setupCode, boolean style) {
-        return extractSetupExportsWithRhino(setupCode, style, null);
+        return extractSetupExportsWithRhino(setupCode, style, null, null);
     }
 
     private static String extractSetupExportsWithRhino(String setupCode, boolean style, Set<String> extraExports) {
-        Set<String> exports = new LinkedHashSet<>();
-        
-        try {
-            // 尝试用 Acorn 解析
-            exports = ScriptUtil.parseTopLevelNames(setupCode);
+        return extractSetupExportsWithRhino(setupCode, style, extraExports, null);
+    }
 
-            exports.removeIf(name ->
-                    !Pattern.compile("\\b" + Pattern.quote(name) + "\\b").matcher(setupCode).find()
-            );
-        } catch (Exception e) {
-            log.warn("extractSetupExportsWithRhino failed: {}", e.getMessage());
-            // Acorn 解析失败，不丢弃已有的 extraExports
+    private static String extractSetupExportsWithRhino(String setupCode, boolean style, Set<String> extraExports, AstParser.AstResult astResult) {
+        // 如果没有传入 astResult，才进行解析（兼容旧调用方式）
+        if (astResult == null) {
+            astResult = AstParser.parseOnce(setupCode);
         }
+        Set<String> exports = new LinkedHashSet<>(astResult.getTopLevelNames());
+        
+        // 过滤掉不在代码中实际使用的名称
+        exports.removeIf(name ->
+                !Pattern.compile("\\b" + Pattern.quote(name) + "\\b").matcher(setupCode).find()
+        );
 
         // 合并 extraExports（包含 import 的组件名和 components 对象中的组件名）
         if (extraExports != null && !extraExports.isEmpty()) {
