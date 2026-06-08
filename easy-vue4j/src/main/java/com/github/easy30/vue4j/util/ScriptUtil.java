@@ -92,7 +92,7 @@ public class ScriptUtil {
         return r != null ? r.toString() : source;
     }
 
-    /** 用 Acorn 解析 JS/TS AST，提取顶层 const/let/var/function/class 名 */
+    /** 用 Acorn 解析 JS/TS AST，提取顶层 const/let/var/function/class 名以及 import 的名称 */
     public static Set<String> parseTopLevelNames(String code) throws Exception {
         ScriptEngine eng = getEngine();
         eng.put("input", code);
@@ -106,6 +106,18 @@ public class ScriptUtil {
                 "    }" +
                 "  } else if (n.type === 'FunctionDeclaration' && n.id) { names.push(n.id.name); }" +
                 "  else if (n.type === 'ClassDeclaration' && n.id) { names.push(n.id.name); }" +
+                "  else if (n.type === 'ImportDeclaration') {" +
+                "    for (var j = 0; j < n.specifiers.length; j++) {" +
+                "      var spec = n.specifiers[j];" +
+                "      if (spec.type === 'ImportDefaultSpecifier' && spec.local) {" +
+                "        names.push(spec.local.name);" +
+                "      } else if (spec.type === 'ImportSpecifier' && spec.local) {" +
+                "        names.push(spec.local.name);" +
+                "      } else if (spec.type === 'ImportNamespaceSpecifier' && spec.local) {" +
+                "        names.push(spec.local.name);" +
+                "      }" +
+                "    }" +
+                "  }" +
                 "}" +
                 "names.join(',');";
         Object result = eng.eval(js);

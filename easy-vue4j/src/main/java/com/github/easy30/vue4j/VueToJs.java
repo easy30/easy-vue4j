@@ -14,6 +14,7 @@ import org.mozilla.javascript.ast.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.script.ScriptEngine;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +36,20 @@ public class VueToJs {
     private static final Pattern EXPORT_DEFAULT_PATTERN = Pattern.compile("export\\s+default\\s+(\\{)", Pattern.DOTALL);
     private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s+.*?(?:;|$)", Pattern.DOTALL | Pattern.MULTILINE);
     private static final Pattern DEFINE_EXPOSE_PATTERN = Pattern.compile("defineExpose\\(([^)]*)\\)");
+
+    // ===== 新增宏处理正则 =====
+    private static final Pattern DEFINE_PROPS_STMT = Pattern.compile(
+            "const\\s+\\w+\\s*=\\s*defineProps\\s*\\(", Pattern.DOTALL);
+    private static final Pattern DEFINE_EMITS_STMT = Pattern.compile(
+            "const\\s+\\w+\\s*=\\s*defineEmits\\s*\\(", Pattern.DOTALL);
+
+    // 提取结果存储，按 Vue 官方规范编译
+    private static String extractedPropsDef = null;
+    private static String extractedEmitsDef = null;
+    private static boolean extractedHasProps = false;
+    private static boolean extractedHasEmits = false;
+    private static boolean extractedHasExpose = false;
+    // ===== 新增结束 =====
     // 匹配自定义元素标签（含连字符）的自闭合语法，如 <el-input />, <el-empty />
     private static final Pattern SELF_CLOSING_CUSTOM_TAG = Pattern.compile("<(\\w+-[\\w-]*)([^>]*?)\\s*/>");
 
@@ -66,6 +81,10 @@ public class VueToJs {
         // 会将其视为未闭合的开始标签，导致后续内容被嵌套其中。
         // 此步骤在 Jsoup 解析前完成，保证 Jsoup 得到正确的 DOM 结构。
         vueContent = fixSelfClosingCustomTags(vueContent);
+        
+        // 预处理：保存自定义组件标签的原始大小写（Jsoup会转为小写）
+        Map<String, String> tagCaseMap = extractCustomTagNames(vueContent);
+        
         Document doc = Jsoup.parse(vueContent);
         // 生成组件唯一 ID
         String componentId = generateComponentId(fullName);
@@ -73,6 +92,12 @@ public class VueToJs {
         // 使用 VueTemplate 处理所有 style 标签（直接从 doc 提取 template）
         VueTemplate vueTemplate = new VueTemplate(componentId);
         TemplateResult vueTemplateResult = vueTemplate.process(doc);
+        
+        // 恢复 template 中自定义标签的原始大小写
+        String restoredTemplate = restoreTagCase(vueTemplateResult.getTemplate(), tagCaseMap);
+        vueTemplateResult = new TemplateResult(restoredTemplate, 
+                vueTemplateResult.getStyleInjectScript(), 
+                vueTemplateResult.getHasModuleStyle());
 
         // 处理 <script> 和 <script setup>
         Element scriptElement = doc.selectFirst("script:not([setup])");
@@ -157,20 +182,32 @@ public class VueToJs {
 //    }
 
     private static String convertContent(TemplateResult vueTemplateResult,String script, String setupScript) {
+        // 重置提取状态（防止 .vue 文件间泄漏）
+        extractedPropsDef = null;
+        extractedEmitsDef = null;
+        extractedHasProps = false;
+        extractedHasEmits = false;
+        extractedHasExpose = false;
+
         StringBuilder setupImports = null;
-        boolean hasStyle=StringUtils.isNotBlank(vueTemplateResult.getStyleInjectScript());
+        Set<String> importedNames = new LinkedHashSet<>(); // 存储 import 的名称
+        
         if (StringUtils.isNotBlank(setupScript)) {
             setupImports = new StringBuilder();
             Matcher importMatcher = IMPORT_PATTERN.matcher(setupScript);
 
             while (importMatcher.find()) {
-                setupImports.append(importMatcher.group()).append("\n");
+                String importStmt = importMatcher.group();
+                setupImports.append(importStmt).append("\n");
+                // 从 import 语句中提取名称
+                importedNames.addAll(extractNamesFromImport(importStmt));
             }
 
             if (setupImports.length() > 0) {
                 setupScript = IMPORT_PATTERN.matcher(setupScript).replaceAll("");
             }
-            setupScript = processDefineExpose(setupScript,vueTemplateResult.getHasModuleStyle());
+            // 统一处理 defineProps / defineEmits / defineExpose
+            setupScript = processSetupScript(setupScript, vueTemplateResult.getHasModuleStyle(), importedNames);
         }
 
         Matcher matcher = EXPORT_DEFAULT_PATTERN.matcher(script);
@@ -181,8 +218,38 @@ public class VueToJs {
 
         StringBuilder result = new StringBuilder(script);
         StringBuilder insertCode=new StringBuilder(vueTemplateResult.getTemplate());
+
+        // 插入提取出的 props 选项（Vue 3 官方规范：defineProps -> props:{}）
+        if (extractedPropsDef != null && !extractedPropsDef.isEmpty()) {
+            insertCode.append("    props: { ").append(extractedPropsDef).append(" },\n");
+        }
+        // 插入提取出的 emits 选项（Vue 3 官方规范：defineEmits -> emits:[]）
+        if (extractedEmitsDef != null && !extractedEmitsDef.isEmpty()) {
+            insertCode.append("    emits: ").append(extractedEmitsDef).append(",\n");
+        }
+        
+        // 插入 components 选项：将 import 的组件名称注册到 components（Vue 3 <script setup> 自动注册行为）
+        if (!importedNames.isEmpty()) {
+            StringBuilder componentsStr = new StringBuilder("    components: { ");
+            boolean first = true;
+            for (String name : importedNames) {
+                // 过滤掉 Vue 的响应式 API 和已知的非组件导入
+                if (!isBuiltInVueName(name)) {
+                    if (!first) componentsStr.append(", ");
+                    componentsStr.append(name);
+                    first = false;
+                }
+            }
+            if (!first) {
+                componentsStr.append(" },\n");
+                insertCode.append(componentsStr);
+            }
+        }
+
         if (setupScript != null) {
-            insertCode.append("    setup() {\n");
+            // 按 Vue 3 官方规范构建 setup 签名：只包含实际需要的参数
+            String setupSig = buildSetupSignature();
+            insertCode.append("    ").append(setupSig).append(" {\n");
             insertCode.append(setupScript).append("\n");
             insertCode.append("    }\n");
         }else if(vueTemplateResult.getHasModuleStyle()){
@@ -197,31 +264,306 @@ public class VueToJs {
 
         return StringUtils.trimToEmpty(vueTemplateResult.getStyleInjectScript())+"\n"+ result.toString();
     }
+    
+    /**
+     * 判断是否是 Vue 内置的响应式 API 名称（不需要注册为组件）
+     */
+    private static boolean isBuiltInVueName(String name) {
+        Set<String> builtIns = new HashSet<>(Arrays.asList(
+            "ref", "reactive", "computed", "watch", "watchEffect",
+            "onMounted", "onUnmounted", "onCreated", "onBeforeMount",
+            "onBeforeUnmount", "onUpdated", "onBeforeUpdate",
+            "nextTick", "defineProps", "defineEmits", "defineExpose",
+            "provide", "inject", "readonly", "shallowRef", "shallowReactive"
+        ));
+        return builtIns.contains(name);
+    }
 
     /**
-     * 处理 defineExpose，将其转换为 return 语句
-     * <p>
-     * 优先使用显式的 defineExpose({...})，否则用 Rhino AST 解析器自动提取顶层声明。
-     *
-     * @param setupCode setup 函数中的代码
-     * @param style     是否包含样式模块
-     * @return 处理后的代码（defineExpose 被替换为 return，或自动追加 return）
+     * 按 Vue 3 官方规范构建 setup 函数签名。
+     * 只包含实际需要的参数：defineProps->props、defineEmits->emit、defineExpose->expose
      */
-    private static String processDefineExpose(String setupCode, boolean style) {
-        // 1. 先尝试匹配显式的 defineExpose . todo: defineExpose可能是中途,return 要放在最后,否则可能中途就return了
-        Matcher matcher = DEFINE_EXPOSE_PATTERN.matcher(setupCode);
-        if (matcher.find()) {
-            String exposeArgs = matcher.group(1).trim();
-            String returnStatement = !style ?
-                    "return " + exposeArgs + ";"
-                    : "return { ..." + exposeArgs + ", ..." + VueGlobal.ALL_STYLES_NAME + " };";
-            return matcher.replaceAll(returnStatement);
+    private static String buildSetupSignature() {
+        List<String> firstParam = new ArrayList<>();
+        List<String> contextProps = new ArrayList<>();
+        if (extractedHasProps) firstParam.add("props");
+        if (extractedHasEmits) contextProps.add("emit");
+        if (extractedHasExpose) contextProps.add("expose");
+
+        StringBuilder sig = new StringBuilder("setup(");
+        if (!firstParam.isEmpty()) {
+            sig.append(String.join(", ", firstParam));
+        }
+        if (!contextProps.isEmpty()) {
+            if (!firstParam.isEmpty()) sig.append(", ");
+            sig.append("{ ").append(String.join(", ", contextProps)).append(" }");
+        }
+        sig.append(")");
+        return sig.toString();
+    }
+
+
+    /**
+     * 按 Vue 3 官方规范处理 <script setup> 中的三个编译时宏：
+     *   1. defineProps({...}) -> 提取到组件 props: {} 选项
+     *   2. defineEmits([...]) -> 提取到组件 emits: [] 选项
+     *   3. defineExpose({...}) -> 编译为 expose({...}) 调用
+     *   4. 自动提取所有顶层声明生成 return（模板绑定）
+     *   5. components: { ... } -> 提取组件名加入导出（支持模板使用）
+     *
+     * @param setupCode    setup 函数中的代码
+     * @param style        是否包含样式模块
+     * @param importedNames 从 import 语句中提取的名称（组件、函数等）
+     * @return 处理后的代码（三个宏已被正确处理）
+     */
+    private static String processSetupScript(String setupCode, boolean style, Set<String> importedNames) {
+        // 0. 使用 Acorn 提取 components: { ... } 中的组件名（如果用户显式写了）
+        Set<String> componentNames = extractComponentNamesWithAcorn(setupCode);
+        
+        // 合并 import 的名称到组件名（import 的组件也需要导出）
+        if (importedNames != null) {
+            componentNames.addAll(importedNames);
         }
 
-        // 2. 没有 defineExpose → 用 Rhino AST 自动提取顶层声明
-       return extractSetupExportsWithRhino(setupCode, style);
+        // 1. defineExpose({...}) -> expose({...})
+        Matcher exposeMatcher = DEFINE_EXPOSE_PATTERN.matcher(setupCode);
+        if (exposeMatcher.find()) {
+            String exposeArgs = exposeMatcher.group(1).trim();
+            setupCode = exposeMatcher.replaceAll("expose(" + exposeArgs + ")");
+            extractedHasExpose = true;
+        }
 
+        // 2. const props = defineProps({...}) -> 提取到 extractedPropsDef，移除语句
+        Matcher pm = DEFINE_PROPS_STMT.matcher(setupCode);
+        if (pm.find()) {
+            int parenStart = pm.end();
+            String args = extractBalancedParenWithAcorn(setupCode, parenStart - 1);
+            if (args != null) {
+                String trimmed = args.trim();
+                if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                    extractedPropsDef = trimmed.substring(1, trimmed.length() - 1).trim();
+                } else {
+                    extractedPropsDef = trimmed;
+                }
+            }
+            setupCode = removeStatementAt(setupCode, pm.start(), parenStart, args);
+            extractedHasProps = true;
+        }
+
+        // 3. const emit = defineEmits([...]) -> 提取到 extractedEmitsDef，移除语句
+        Matcher em = DEFINE_EMITS_STMT.matcher(setupCode);
+        if (em.find()) {
+            int parenStart = em.end();
+            String args = extractBalancedParenWithAcorn(setupCode, parenStart - 1);
+            if (args != null) {
+                extractedEmitsDef = args.trim();
+            }
+            setupCode = removeStatementAt(setupCode, em.start(), parenStart, args);
+            extractedHasEmits = true;
+        }
+
+        // 4. 自动提取所有顶层声明，生成 return { ... }（模板绑定）
+        //    同时将 components: {...} 中的组件名加入导出
+        return extractSetupExportsWithRhino(setupCode, style, componentNames);
     }
+
+    /**
+     * 使用 Acorn 解析代码，提取 components: { ... } 中的组件名
+     * 支持：const components = { KnowledgeGraphCanvas }
+     *       let components = { Foo, Bar }
+     */
+    private static Set<String> extractComponentNamesWithAcorn(String setupCode) {
+        Set<String> componentNames = new LinkedHashSet<>();
+        try {
+            ScriptEngine eng = ScriptUtil.getEngine();
+            eng.put("input", setupCode);
+            String js = "var ast = acorn.parse(input, { sourceType: 'module', ecmaVersion: 2022 });" +
+                    "var names = [];" +
+                    "for (var i = 0; i < ast.body.length; i++) {" +
+                    "  var node = ast.body[i];" +
+                    "  if (node.type === 'VariableDeclaration') {" +
+                    "    for (var j = 0; j < node.declarations.length; j++) {" +
+                    "      var decl = node.declarations[j];" +
+                    "      if (decl.id && decl.id.type === 'Identifier' && decl.id.name === 'components'" +
+                    "          && decl.init && decl.init.type === 'ObjectExpression') {" +
+                    "        for (var k = 0; k < decl.init.properties.length; k++) {" +
+                    "          var prop = decl.init.properties[k];" +
+                    "          if (prop.type === 'Property' && prop.key) {" +
+                    "            names.push(prop.key.name || prop.key.value);" +
+                    "          } else if (prop.type === 'SpreadElement' && prop.argument) {" +
+                    "            names.push('...' + (prop.argument.name || ''));" +
+                    "          }" +
+                    "        }" +
+                    "      }" +
+                    "    }" +
+                    "  }" +
+                    "}" +
+                    "names.join(',');";
+            Object result = eng.eval(js);
+            if (result != null && result.toString().trim().length() > 0) {
+                for (String n : result.toString().split(",")) {
+                    n = n.trim();
+                    if (!n.isEmpty() && !n.startsWith("...")) {
+                        componentNames.add(n);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("extractComponentNamesWithAcorn failed: {}", e.getMessage());
+        }
+        return componentNames;
+    }
+
+    /**
+     * 使用 Acorn 从指定位置提取平衡括号内容
+     * 比手动 parseBalancedParen 更健壮，支持复杂嵌套和 ES2022 语法
+     */
+    private static String extractBalancedParenWithAcorn(String code, int fromIndex) {
+        if (fromIndex < 0 || fromIndex >= code.length() || code.charAt(fromIndex) != '(') {
+            return extractBalancedParen(code, fromIndex); // 回退到手动解析
+        }
+        try {
+            // 找到对应的函数调用节点
+            ScriptEngine eng = ScriptUtil.getEngine();
+            eng.put("input", code);
+            eng.put("start", fromIndex);
+            String js = "var ast = acorn.parse(input, { sourceType: 'module', ecmaVersion: 2022, onComment: [] });" +
+                    "var result = null;" +
+                    "function findCall(node, pos) {" +
+                    "  if (result) return;" +
+                    "  if (!node) return;" +
+                    "  if (node.type === 'CallExpression' && node.start <= pos && node.end >= pos) {" +
+                    "    if (node.arguments && node.arguments.length > 0) {" +
+                    "      result = input.substring(node.arguments[0].start, node.arguments[0].end);" +
+                    "    }" +
+                    "  }" +
+                    "  for (var key in node) {" +
+                    "    if (key === 'start' || key === 'end' || key === 'type') continue;" +
+                    "    var val = node[key];" +
+                    "    if (Array.isArray(val)) {" +
+                    "      for (var i = 0; i < val.length; i++) findCall(val[i], pos);" +
+                    "    } else if (val && typeof val === 'object' && val.type) {" +
+                    "      findCall(val, pos);" +
+                    "    }" +
+                    "  }" +
+                    "}" +
+                    "for (var i = 0; i < ast.body.length; i++) findCall(ast.body[i], start);" +
+                    "result || '';";
+            Object r = eng.eval(js);
+            return r != null ? r.toString() : extractBalancedParen(code, fromIndex);
+        } catch (Exception e) {
+            log.warn("extractBalancedParenWithAcorn failed: {}, falling back", e.getMessage());
+            return extractBalancedParen(code, fromIndex);
+        }
+    }
+
+    /**
+     * 从 import 语句中提取导入的名称
+     * 支持：
+     * - import Foo from './foo.vue'
+     * - import { a, b } from 'xxx'
+     * - import * as ns from 'xxx'
+     * - import { a as b } from 'xxx'
+     */
+    private static Set<String> extractNamesFromImport(String importStmt) {
+        Set<String> names = new LinkedHashSet<>();
+        
+        // 移除 import 关键字和末尾的分号
+        String s = importStmt.replaceAll("^import\\s+", "").replaceAll(";\\s*$", "");
+        
+        // 处理 import * as ns from 'xxx'
+        Pattern namespacePattern = Pattern.compile("\\*\\s+as\\s+(\\w+)");
+        Matcher nm = namespacePattern.matcher(s);
+        if (nm.find()) {
+            names.add(nm.group(1));
+            return names;
+        }
+        
+        // 处理 import Foo from 'xxx' 或 import { a, b } from 'xxx'
+        // 找到 from 之前的部分
+        int fromIndex = s.indexOf(" from ");
+        if (fromIndex > 0) {
+            String importPart = s.substring(0, fromIndex).trim();
+            
+            // 如果有花括号，说明是命名导入
+            if (importPart.startsWith("{") && importPart.endsWith("}")) {
+                // 提取 { a, b } 或 { a as b } 中的名称
+                String insideBraces = importPart.substring(1, importPart.length() - 1).trim();
+                String[] parts = insideBraces.split(",");
+                for (String part : parts) {
+                    part = part.trim();
+                    // 处理 { a as b } 格式，提取 b
+                    if (part.contains(" as ")) {
+                        String[] asParts = part.split("\\s+as\\s+");
+                        if (asParts.length == 2) {
+                            names.add(asParts[1].trim());
+                        }
+                    } else {
+                        names.add(part);
+                    }
+                }
+            } else {
+                // 默认导入：import Foo from 'xxx'
+                names.add(importPart);
+            }
+        }
+        
+        return names;
+    }
+
+    /**
+     * 从指定位置开始提取平衡括号内的内容（含字符串/模板字符串处理）。
+     * 如 extractBalancedParen("abc(de(f)gh)", 3) -> "de(f)gh"
+     */
+    private static String extractBalancedParen(String code, int fromIndex) {
+        if (fromIndex >= code.length() || code.charAt(fromIndex) != '(') return null;
+        int depth = 0;
+        int i = fromIndex;
+        while (i < code.length()) {
+            char c = code.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0) return code.substring(fromIndex + 1, i);
+            } else if (c == '"' || c == '\'') {
+                char quote = c;
+                i++;
+                while (i < code.length() && code.charAt(i) != quote) {
+                    if (code.charAt(i) == '\\') i++;
+                    i++;
+                }
+            } else if (c == '`') {
+                i++;
+                while (i < code.length() && code.charAt(i) != '`') {
+                    if (code.charAt(i) == '\\') i++;
+                    if (code.charAt(i) == '$' && i + 1 < code.length() && code.charAt(i + 1) == '{') {
+                        i += 2;
+                        int braceDepth = 1;
+                        while (i < code.length() && braceDepth > 0) {
+                            if (code.charAt(i) == '{') braceDepth++;
+                            else if (code.charAt(i) == '}') braceDepth--;
+                            i++;
+                        }
+                    }
+                    i++;
+                }
+            }
+            i++;
+        }
+        return null;
+    }
+
+    /**
+     * 移除从指定位置开始的函数调用语句。
+     */
+    private static String removeStatementAt(String code, int stmtStart, int parenStart, String argsContent) {
+        int end = parenStart + 1 + (argsContent != null ? argsContent.length() : 0);
+        while (end < code.length() && (code.charAt(end) == ';' || code.charAt(end) == ' ' || code.charAt(end) == '\t')) {
+            end++;
+        }
+        return code.substring(0, stmtStart) + code.substring(end);
+    }
+
 
     /**
      * 使用 Rhino AST 解析器提取 &lt;script setup&gt; 顶层声明，自动生成 return 语句。
@@ -229,26 +571,39 @@ public class VueToJs {
      * Babel 会注入 helper（如 _typeof、_objectSpread 等），通过交叉比对原始代码过滤。
      */
     private static String extractSetupExportsWithRhino0(String setupCode, boolean style) {
-        return extractSetupExportsWithRhino(setupCode, style);
+        return extractSetupExportsWithRhino(setupCode, style, null);
     }
 
-    private static String extractSetupExportsWithRhino(String setupCode, boolean style) {
+    private static String extractSetupExportsWithRhino(String setupCode, boolean style, Set<String> extraExports) {
+        Set<String> exports = new LinkedHashSet<>();
+        
         try {
-            Set<String> exports = ScriptUtil.parseTopLevelNames(setupCode);
+            // 尝试用 Acorn 解析
+            exports = ScriptUtil.parseTopLevelNames(setupCode);
 
             exports.removeIf(name ->
                     !Pattern.compile("\\b" + Pattern.quote(name) + "\\b").matcher(setupCode).find()
             );
-
-            String vars = String.join(", ", exports);
-            String returnStatement = !style
-                    ? "return { " + vars + " };"
-                    : "return { " + vars + ", ..." + VueGlobal.ALL_STYLES_NAME + " };";
-            return setupCode + "\n" + returnStatement;
         } catch (Exception e) {
             log.warn("extractSetupExportsWithRhino failed: {}", e.getMessage());
-            return setupCode + "\nreturn {};";
+            // Acorn 解析失败，不丢弃已有的 extraExports
         }
+
+        // 合并 extraExports（包含 import 的组件名和 components 对象中的组件名）
+        if (extraExports != null && !extraExports.isEmpty()) {
+            exports.addAll(extraExports);
+        }
+
+        // 如果没有任何导出，至少导出 import 的组件（防止模板找不到组件）
+        if (exports.isEmpty() && extraExports != null && !extraExports.isEmpty()) {
+            exports.addAll(extraExports);
+        }
+
+        String vars = String.join(", ", exports);
+        String returnStatement = !style
+                ? "return { " + vars + " };"
+                : "return { " + vars + ", ..." + VueGlobal.ALL_STYLES_NAME + " };";
+        return setupCode + "\n" + returnStatement;
     }
 
 
@@ -281,6 +636,51 @@ public class VueToJs {
             }
         }
         return exports;
+    }
+
+    /**
+     * 从 Vue 文件内容中提取自定义组件标签的原始大小写
+     * Jsoup 会将所有标签名转为小写，需要在解析前保存原始大小写
+     */
+    private static Map<String, String> extractCustomTagNames(String vueContent) {
+        Map<String, String> tagCaseMap = new HashMap<>();
+        
+        // 匹配自定义组件标签（首字母大写或包含连字符）
+        Pattern tagPattern = Pattern.compile("<([A-Z][a-zA-Z0-9]*|[a-z]+-[a-z-]+)(\\s|>)", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = tagPattern.matcher(vueContent);
+        
+        while (matcher.find()) {
+            String originalTag = matcher.group(1);
+            String lowerTag = originalTag.toLowerCase();
+            // 只保存首字母大写的组件标签（排除原生 HTML 标签）
+            if (Character.isUpperCase(originalTag.charAt(0))) {
+                tagCaseMap.put(lowerTag, originalTag);
+            }
+        }
+        
+        return tagCaseMap;
+    }
+
+    /**
+     * 恢复 template 中自定义标签的原始大小写
+     */
+    private static String restoreTagCase(String template, Map<String, String> tagCaseMap) {
+        if (tagCaseMap.isEmpty()) {
+            return template;
+        }
+        
+        String result = template;
+        for (Map.Entry<String, String> entry : tagCaseMap.entrySet()) {
+            String lowerTag = entry.getKey();
+            String originalTag = entry.getValue();
+            
+            // 替换开始标签
+            result = result.replace("<" + lowerTag, "<" + originalTag);
+            // 替换结束标签
+            result = result.replace("</" + lowerTag, "</" + originalTag);
+        }
+        
+        return result;
     }
 
     public static void main(String[] args) {
