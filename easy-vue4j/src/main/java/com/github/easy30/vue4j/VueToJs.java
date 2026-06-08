@@ -208,7 +208,7 @@ public class VueToJs {
      * @return 处理后的代码（defineExpose 被替换为 return，或自动追加 return）
      */
     private static String processDefineExpose(String setupCode, boolean style) {
-        // 1. 先尝试匹配显式的 defineExpose
+        // 1. 先尝试匹配显式的 defineExpose . todo: defineExpose可能是中途,return 要放在最后,否则可能中途就return了
         Matcher matcher = DEFINE_EXPOSE_PATTERN.matcher(setupCode);
         if (matcher.find()) {
             String exposeArgs = matcher.group(1).trim();
