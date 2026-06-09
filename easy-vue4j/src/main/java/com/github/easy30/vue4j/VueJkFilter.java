@@ -3,6 +3,7 @@ package com.github.easy30.vue4j;
 import com.github.easy30.vue4j.object.ClientException;
 import com.github.easy30.vue4j.util.PathMatcher;
 import com.github.easy30.vue4j.util.VueGlobal;
+import com.github.easy30.vue4j.util.VuePreloader;
 import com.github.easy30.vue4j.util.resource.CacheContent;
 import com.github.easy30.vue4j.util.resource.ClassPathResource;
 import lombok.extern.slf4j.Slf4j;
@@ -79,6 +80,11 @@ public class VueJkFilter implements jakarta.servlet.Filter {
 
     private String filterClientJsPath;
 
+    /**
+     * 是否启用预热
+     */
+    private boolean preloadEnabled;
+
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 1. 从 FilterConfig 读取环境配置
@@ -119,6 +125,9 @@ public class VueJkFilter implements jakarta.servlet.Filter {
 
         filterClientJsPath = config.getProperty("filter.client-js.path", "/client-js");
 
+        // 读取预热配置
+        preloadEnabled = Boolean.parseBoolean(config.getProperty("vue4j.preload.enabled", "true"));
+
         log.info("Vue Filter config loaded:");
         log.info("  - charset: {}", charset);
         log.info("  - vue4j.resource.root: {}", resourceRoot);
@@ -135,10 +144,20 @@ public class VueJkFilter implements jakarta.servlet.Filter {
         // 8. 保存 ServletContext 引用
         this.servletContext = filterConfig.getServletContext();
 
-        // 9. 异步预初始化 TypeScriptToJs 引擎（避免阻塞启动）
+        // 9. 异步预初始化 TypeScriptToJs 引擎和 Vue 文件预热（避免阻塞启动）
         Thread initThread = new Thread(() -> {
                 TypeScriptToJs.preInitialize();
                 TypeScriptToJs.convertJs("const a=2","test.js");
+
+                // Vue 文件预热
+                if (preloadEnabled) {
+                    try {
+                        VuePreloader preloader = new VuePreloader(vueCache, charset);
+                        preloader.preload(resourceRoot, vueExt);
+                    } catch (Exception e) {
+                        log.warn("Vue preloading failed", e);
+                    }
+                }
         }, "VueJkFilter-TypeScript-Init");
         initThread.setDaemon(true);
         initThread.start();

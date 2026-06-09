@@ -2,6 +2,7 @@ package com.github.easy30.vue4j;
 
 import com.github.easy30.vue4j.util.PathMatcher;
 import com.github.easy30.vue4j.util.VueGlobal;
+import com.github.easy30.vue4j.util.VuePreloader;
 import com.github.easy30.vue4j.util.resource.CacheContent;
 import com.github.easy30.vue4j.util.resource.ClassPathResource;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +79,20 @@ public class VueFilter implements Filter {
 
     private String filterClientJsPath;
 
+    /**
+     * 是否启用预热
+     */
+    private boolean preloadEnabled;
+
+    /**
+     * 预热基础目录
+     */
+    private String preloadBaseDir;
+
+    /**
+     * 预热包含模式
+     */
+
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // 1. 从 FilterConfig 读取环境配置
@@ -118,6 +133,12 @@ public class VueFilter implements Filter {
 
         filterClientJsPath = config.getProperty("filter.client-js.path", "/client-js");
 
+            // 读取预热配置
+            preloadEnabled = Boolean.parseBoolean(config.getProperty("vue4j.preload.enabled", "true"));
+            // 预热基础目录：默认基于 resourceRoot 计算
+            String defaultPreloadBaseDir = "./src/main/resources" + resourceRoot;
+            preloadBaseDir = config.getProperty("vue4j.preload.base-dir", defaultPreloadBaseDir);
+
         log.info("Vue Filter config loaded:");
         log.info("  - charset: {}", charset);
         log.info("  - vue4j.resource.root: {}", resourceRoot);
@@ -134,9 +155,19 @@ public class VueFilter implements Filter {
         // 8. 保存 ServletContext 引用
         this.servletContext = filterConfig.getServletContext();
 
-        // 9. 异步预初始化 TypeScriptToJs 引擎（避免阻塞启动）
+        // 9. 异步预初始化 TypeScriptToJs 引擎和 Vue 文件预热（避免阻塞启动）
         Thread initThread = new Thread(() -> {
             TypeScriptToJs.preInitialize();
+            
+            // Vue 文件预热
+            if (preloadEnabled) {
+                try {
+                    VuePreloader preloader = new VuePreloader(vueCache, charset);
+                    preloader.preload(preloadBaseDir, vueExt);
+                } catch (Exception e) {
+                    log.warn("Vue preloading failed", e);
+                }
+            }
         }, "VueJkFilter-TypeScript-Init");
         initThread.setDaemon(true);
         initThread.start();
