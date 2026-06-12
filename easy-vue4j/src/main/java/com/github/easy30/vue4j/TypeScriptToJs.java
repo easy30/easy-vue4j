@@ -4,6 +4,8 @@ import com.github.easy30.vue4j.util.EsbuildUtil;
 import com.github.easy30.vue4j.util.ScriptUtil;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.File;
+
 /**
  * TypeScript + 装饰器语法转换器
  * <p>
@@ -17,9 +19,9 @@ public class TypeScriptToJs {
     }
 
     /** 预初始化（可在应用启动时调用，预热 esbuild + ScriptEngine） */
-    public static boolean preInitialize() {
+    public static boolean preInitialize(File esbuildFile) {
         try {
-            EsbuildUtil.getBinary();
+            EsbuildUtil.init(esbuildFile);
             log.info("esbuild pre-initialized");
             return true;
         } catch (Exception e) {

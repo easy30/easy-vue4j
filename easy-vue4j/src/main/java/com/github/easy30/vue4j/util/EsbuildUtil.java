@@ -21,24 +21,44 @@ public class EsbuildUtil {
     private static final String ESBUILD_VERSION = "0.28.0";
     private static volatile File esbuildBinary = null;
 
+    public static void init(File defaultFile) throws Exception {
+        File platformBin=null;
+        File plainBin=null;
+        String url =null;
+        try {
+           if (defaultFile.exists()) {
+               esbuildBinary = defaultFile;
+               return;
+           }
+
+           File dir = getDownloadDir();
+           String platform = detectPlatform();
+             platformBin = new File(new File(dir, platform), "esbuild");
+           if (platformBin.exists()) {
+               esbuildBinary = platformBin;
+               return;
+           }
+
+             plainBin = new File(dir, "esbuild");
+           if (plainBin.exists()) {
+               esbuildBinary = plainBin;
+               return;
+           }
+
+           platformBin.getParentFile().mkdirs();
+           url = "https://registry.npmjs.org/@esbuild/" + platform + "/-/" + platform + "-" + ESBUILD_VERSION + ".tgz";
+           download(url,platformBin);
+           platformBin.setExecutable(true);
+           esbuildBinary = platformBin;
+       }finally {
+           if (esbuildBinary == null) log.error("Cannot find esbuild binary in {},{},{}. \nYou can download from {} and copy to the correct path.",defaultFile, platformBin,plainBin,url);
+           else log.info("Using esbuild binary: {}", esbuildBinary);
+       }
+    }
     /** 获取 esbuild 二进制，不存在则自动下载 */
     public static File getBinary() throws Exception {
-        if (esbuildBinary != null && esbuildBinary.exists()) return esbuildBinary;
+              return esbuildBinary;
 
-        File dir = getDownloadDir();
-        String platform = detectPlatform();
-
-        File platformBin = new File(new File(dir, platform), "esbuild");
-        if (platformBin.exists()) { esbuildBinary = platformBin; return platformBin; }
-
-        File plainBin = new File(dir, "esbuild");
-        if (plainBin.exists()) { esbuildBinary = plainBin; return plainBin; }
-
-        platformBin.getParentFile().mkdirs();
-        download(platformBin, platform);
-        platformBin.setExecutable(true);
-        esbuildBinary = platformBin;
-        return platformBin;
     }
 
     /** 用 esbuild 转译 JS/TS */
@@ -84,7 +104,7 @@ public class EsbuildUtil {
     // ==================== 内部 ====================
 
     private static File getDownloadDir() {
-        try {
+        /*try {
             ProtectionDomain pd = EsbuildUtil.class.getProtectionDomain();
             if (pd != null && pd.getCodeSource() != null) {
                 URI jarUri = pd.getCodeSource().getLocation().toURI();
@@ -95,8 +115,8 @@ public class EsbuildUtil {
                     return dir;
                 }
             }
-        } catch (Exception e) { log.debug("Cannot determine JAR dir: {}", e.getMessage()); }
-        File dir = new File(System.getProperty("user.home"), "easy-vue4j/esbuild");
+        } catch (Exception e) { log.debug("Cannot determine JAR dir: {}", e.getMessage()); }*/
+        File dir = new File(System.getProperty("user.home"), ".easy-vue4j/esbuild");
         dir.mkdirs();
         return dir;
     }
@@ -126,8 +146,8 @@ public class EsbuildUtil {
         return osName + "-" + archName;
     }
 
-    private static void download(File target, String platform) throws Exception {
-        String url = "https://registry.npmjs.org/@esbuild/" + platform + "/-/" + platform + "-" + ESBUILD_VERSION + ".tgz";
+    private static void download(String url, File target) throws Exception {
+
         log.info("Downloading esbuild from {} ...", url);
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setConnectTimeout(30000);
