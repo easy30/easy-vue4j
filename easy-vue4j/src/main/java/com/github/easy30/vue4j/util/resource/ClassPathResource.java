@@ -11,6 +11,7 @@ import java.net.URL;
 public class ClassPathResource implements BaseResource {
     private URL fileUrl;
 
+    private long DEFAULT_LAST_MODIFIED = System.currentTimeMillis();
   
     public ClassPathResource(String path) throws  IOException{
           fileUrl =   this.getClass().getResource(path);
@@ -33,7 +34,7 @@ public class ClassPathResource implements BaseResource {
     }
     private long getLastModified(URL fileUrl) {
         // 获取最后修改时间
-        long lastModified = -1;
+        long lastModified = DEFAULT_LAST_MODIFIED;
         if (fileUrl == null) {
             return lastModified;
         }

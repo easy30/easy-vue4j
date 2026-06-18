@@ -7,6 +7,7 @@ import com.github.easy30.vue4j.util.VuePreloader;
 import com.github.easy30.vue4j.util.resource.CacheContent;
 import com.github.easy30.vue4j.util.resource.ClassPathResource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
@@ -53,7 +54,7 @@ public class VueFilterCore {
         String resourceRootKey = env + ".resource.root";
         resourceRoot = System.getProperty(resourceRootKey);
         if (resourceRoot == null) {
-            resourceRoot = config.getProperty(resourceRootKey, "/static");
+            resourceRoot = config.getProperty(resourceRootKey, "classpath:/static");
         }
 
         // 热更新开关
@@ -129,7 +130,7 @@ public class VueFilterCore {
 
         // 3. client-js 静态资源
         if (servletPath.startsWith(filterClientJsPath)) {
-            String path = "/client-js/" + StringUtils.substring(servletPath, filterClientJsPath.length());
+            String path =   ("/client-js/" + StringUtils.substring(servletPath, filterClientJsPath.length())).replace("//","/");
             response.setContentType(resolveContentType(path));
             response.setCharacterEncoding(charset);
             response.writeBody(new ClassPathResource(path).getContent());
