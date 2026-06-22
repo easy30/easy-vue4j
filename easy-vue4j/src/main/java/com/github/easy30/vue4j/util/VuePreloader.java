@@ -146,20 +146,31 @@ public class VuePreloader {
      */
     private int preloadFromJar(URL jarUrl, String classpathLocation, String vueExt) {
         try {
-            // jar:file:/path/to/app.jar!/static
-            // 创建 JAR 文件系统
-            URI jarUri = URI.create("jar:" + jarUrl.getFile().split("!")[0]);
+            // jarUrl = jar:file:/yjb/app/cyberwater-ai.jar!/BOOT-INF/classes!/static
+            // 外层 jar 文件部分：file:/yjb/app/cyberwater-ai.jar
+            // jar 内 entry 路径（最后一个 ! 之后的部分）：/BOOT-INF/classes/static
+            String fileSpec = jarUrl.getFile();
+            int lastBang = fileSpec.lastIndexOf("!/");
+            String jarFile = fileSpec.substring(0, lastBang);
+            String entryPath = fileSpec.substring(lastBang + 1);
+
+            URI jarUri = URI.create("jar:" + jarFile);
             FileSystem fs = FileSystems.newFileSystem(jarUri, Collections.emptyMap());
-            
-            // JAR 内的路径，去掉开头的 /
-            String jarPath = classpathLocation.startsWith("/") ? classpathLocation.substring(1) : classpathLocation;
-            Path rootPath = fs.getPath(jarPath);
-            
+
+            Path rootPath = fs.getPath(entryPath);
+
             if (!Files.exists(rootPath)) {
-                log.warn("JAR path not found: {}", jarPath);
+                log.warn("JAR path not found: {}", entryPath);
                 fs.close();
                 return 0;
             }
+
+            // 计算相对路径偏移：jar内资源路径去掉首尾斜杠，如 /BOOT-INF/classes/static -> BOOT-INF/classes/static
+            // 去掉 classpathLocation 前缀部分得到相对路径根，如 /static -> 去掉此段
+            String cpPrefix = classpathLocation.startsWith("/") ? classpathLocation : "/" + classpathLocation;
+            if (!cpPrefix.endsWith("/")) cpPrefix = cpPrefix + "/";
+            // jarRoot 是 jar 内完整路径: BOOT-INF/classes/static
+            String jarRoot = entryPath.startsWith("/") ? entryPath.substring(1) : entryPath;
 
             int successCount = 0;
             try (Stream<Path> paths = Files.walk(rootPath)) {
@@ -167,16 +178,20 @@ public class VuePreloader {
                     .filter(Files::isRegularFile)
                     .filter(p -> p.toString().endsWith(vueExt))
                     .collect(Collectors.toList());
-                
-                log.info("Found {} Vue files to preload from JAR: {}", vueFiles.size(), jarUri);
+
+                log.info("Found {} Vue files to preload from JAR: {} entry={}", vueFiles.size(), jarUri, entryPath);
 
                 for (Path vueFile : vueFiles) {
                     try {
-                        // 相对路径：/static/views/Test.vue
-                        String relativePath = "/" + jarPath + "/" + rootPath.relativize(vueFile).toString();
-                        relativePath = relativePath.replace('\\', '/');
+                        // 相对路径：/cai/views/KnowledgeGraph.vue（VueCache 会自己加上 root）
+                        String fileInJar = jarRoot + "/" + rootPath.relativize(vueFile).toString();
+                        String relativePath = fileInJar.replace('\\', '/');
+                        // 去掉 classpathLocation 前缀（如 /static），得到 VueCache 期望的 servletPath
+                        if (relativePath.startsWith(jarRoot)) {
+                            relativePath = "/" + relativePath.substring(jarRoot.length()).replaceAll("^/+", "");
+                        }
                         String filename = vueFile.getFileName().toString();
-                        
+
                         // 预热（vueCache.getContent 会自己读取文件）
                         vueCache.getContent(filename, relativePath, charset, false);
                         successCount++;
@@ -186,12 +201,12 @@ public class VuePreloader {
                     }
                 }
             }
-            
+
             fs.close();
             log.info("Vue preloading from JAR completed: {} success", successCount);
             return successCount;
-            
-        } catch (IOException e) {
+
+        } catch (Exception e) {
             log.warn("Failed to scan JAR file: {}", jarUrl, e);
             return 0;
         }
