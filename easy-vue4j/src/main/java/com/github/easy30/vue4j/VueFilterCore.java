@@ -35,6 +35,7 @@ public class VueFilterCore {
     private String esbuildPath;
     private VueCache vueCache;
     private MimeTypeLookup mimeLookup;
+    private boolean noCache;
 
     /**
      * 初始化配置、缓存和预热线程
@@ -70,6 +71,8 @@ public class VueFilterCore {
         preloadEnabled = Boolean.parseBoolean(config.getProperty("vue4j.preload.enabled", "true"));
         esbuildPath = config.getProperty("esbuild.path", "");
 
+        noCache = Boolean.parseBoolean(config.getProperty("no-cache", "true"));
+
         log.info("VueFilterCore config loaded:");
         log.info("  - env: {}", env);
         log.info("  - charset: {}", charset);
@@ -79,6 +82,10 @@ public class VueFilterCore {
         log.info("  - {}.reload: {}", env, reloadEnabled);
         log.info("  - filter.exclude: {}", filterExclude);
         log.info("  - filter.exclude-no-ext: {}", excludeNoExt);
+        log.info("  - filter.client-js.path: {}", filterClientJsPath);
+        log.info("  - vue4j.preload.enabled: {}", preloadEnabled);
+        log.info("  - esbuild.path: {}", esbuildPath);
+        log.info("  - no-cache: {}", noCache);
 
         vueCache = new VueCache(resourceRoot, vueExt);
 
@@ -141,9 +148,11 @@ public class VueFilterCore {
         // 4. 热更新判断
         boolean needReload = shouldReload(servletPath);
 
-        // 5. 缓存控制头
-        if (needReload) {
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        // 5. 缓存控制头：统一使用 no-cache 让浏览器每次请求都向服务器验证文件是否变化（通过 Last-Modified / 304），
+        //    确保发布新版本后浏览器能及时获取最新文件，同时未变化的文件仍可走 304 减少带宽
+        //如果 noCache=false,则需要前端自己控制缓存,如通过v=version参数来控制vue和js的缓存
+        if(noCache) {
+            response.setHeader("Cache-Control", "no-cache");
             response.setHeader("Pragma", "no-cache");
             response.setHeader("Expires", "0");
         }
