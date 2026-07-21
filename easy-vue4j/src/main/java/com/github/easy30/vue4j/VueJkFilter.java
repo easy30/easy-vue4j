@@ -8,6 +8,7 @@ import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 
 import java.io.IOException;
+import java.util.Enumeration;
 import java.util.Properties;
 
 /**
@@ -25,8 +26,18 @@ public class VueJkFilter implements jakarta.servlet.Filter {
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
-        // 1. 读取环境配置
-        String env = filterConfig.getInitParameter("vue4j.env");
+
+        // 1. 加载配置(优先级低)
+        Properties config = VueGlobal.loadProperties("easy-vue4j.properties");
+
+        // 2. 加载配置(优先级高)
+        Enumeration<String> initParameterNames = filterConfig.getInitParameterNames();
+        while(initParameterNames!=null&&initParameterNames.hasMoreElements()){
+            String name = initParameterNames.nextElement();
+            config.put(name,filterConfig.getInitParameter(name));
+        }
+
+        String env = config.getProperty("vue4j.env");
         if (StringUtils.isBlank(env)) {
             env = System.getProperty("vue4j.env");
             if (StringUtils.isBlank(env)) {
@@ -35,8 +46,6 @@ public class VueJkFilter implements jakarta.servlet.Filter {
         }
         log.info("Vue Filter initialized with env: {}", env);
 
-        // 2. 加载配置
-        Properties config = VueGlobal.loadProperties("easy-vue4j.properties");
 
         // 3. 创建核心并初始化
         MimeTypeLookup mimeLookup = filterConfig.getServletContext()::getMimeType;
