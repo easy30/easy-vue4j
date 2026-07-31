@@ -4,6 +4,7 @@ import com.github.easy30.vue4j.util.EsbuildUtil;
 import com.github.easy30.vue4j.util.ScriptUtil;
 import lombok.extern.slf4j.Slf4j;
 
+import javax.script.ScriptEngine;
 import java.io.File;
 
 /**
@@ -27,12 +28,16 @@ public class TypeScriptToJs {
         } catch (Exception e) {
             log.warn("esbuild not available: {}", e.getMessage());
         }
+
+        ScriptEngine eng =null;
         try {
-            ScriptUtil.getEngine();
+            eng = ScriptUtil.getEngine();
             return true;
         } catch (Exception e) {
             log.error("ScriptEngine pre-init failed", e);
             return false;
+        }finally {
+            ScriptUtil.returnEngine(eng);
         }
     }
 

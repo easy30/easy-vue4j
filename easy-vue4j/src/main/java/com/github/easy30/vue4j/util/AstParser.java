@@ -83,19 +83,23 @@ public class AstParser {
 
         try {
             ScriptEngine eng = ScriptUtil.getEngine();
-            eng.put("input", code);
+            try {
+                eng.put("input", code);
 
-            // 先执行外部脚本定义 parseVueSetup 函数
-            eng.eval(parseScript);
+                // 先执行外部脚本定义 parseVueSetup 函数
+                eng.eval(parseScript);
 
-            // 调用 parseVueSetup 函数解析代码
-            Object r = eng.eval("parseVueSetup(input);");
+                // 调用 parseVueSetup 函数解析代码
+                Object r = eng.eval("parseVueSetup(input);");
 
-            if (r != null) {
-                AstResult parsed = GSON.fromJson(r.toString(), AstResult.class);
-                if (parsed != null) {
-                    result = parsed;
+                if (r != null) {
+                    AstResult parsed = GSON.fromJson(r.toString(), AstResult.class);
+                    if (parsed != null) {
+                        result = parsed;
+                    }
                 }
+            } finally {
+                ScriptUtil.returnEngine(eng);
             }
         } catch (Exception e) {
             log.warn("AstParser.parseOnce failed: {}", e.getMessage());

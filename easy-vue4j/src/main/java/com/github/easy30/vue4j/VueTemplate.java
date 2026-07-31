@@ -28,6 +28,11 @@ public class VueTemplate {
 
     private static final Pattern CLASS_SELECTOR_PATTERN = Pattern.compile("\\.([a-zA-Z_-][a-zA-Z0-9_-]*)");
 
+    /**
+     * :deep() / ::v-deep() 的正则 — 用于 CSS 预处理
+     */
+    private static final Pattern DEEP_PATTERN = Pattern.compile("(?:::v-deep|:deep)\\(([^)]+)\\)");
+
     private static final Logger log = LoggerFactory.getLogger(VueTemplate.class);
 
     private final String componentId;
@@ -151,17 +156,28 @@ public class VueTemplate {
         return new TemplateResult(result.toString(), styleInjectScript,hasModuleStyle);
     }
 
+    // ========================================================================
+    // CSS 处理：预处理 :deep() → 占位符 → ph-css 解析 → 加 scoped → 恢复占位符
+    // ========================================================================
+
     /**
-     * 处理单个 CSS
+     * 处理单个 CSS — 在交给 ph-css 解析前先预处理 :deep() / ::v-deep()
+     *
+     * <p>ph-css 6.5 不认识 :deep()/::v-deep() 这些 Vue 特有的选择器伪类，
+     * 解析会失败并返回 null。所以先替换为临时占位符让 ph-css 能正常解析，
+     * 然后在写回时把占位符恢复为原始选择器内容。</p>
      */
-    private String processCss(String cssContent, boolean scoped, boolean module, String moduleName,Map<String, String> moduleClassMapping) {
+    private String processCss(String cssContent, boolean scoped, boolean module, String moduleName, Map<String, String> moduleClassMapping) {
         try {
-            CascadingStyleSheet cssParsed = CSSReader.readFromString(cssContent, com.helger.css.ECSSVersion.LATEST);
+            // 预处理：收集 :deep(...) 并替换为临时占位符 __DEEP_0__ 等
+            List<String> deepInnerSelectors = new ArrayList<>();
+            String preprocessedCss = preprocessDeep(cssContent, deepInnerSelectors);
+
+            CascadingStyleSheet cssParsed = CSSReader.readFromString(preprocessedCss, com.helger.css.ECSSVersion.LATEST);
 
             if (cssParsed == null) {
                 return cssContent;
             }
-
 
             for (int i = 0; i < cssParsed.getRuleCount(); i++) {
                 Object rule = cssParsed.getRuleAtIndex(i);
@@ -169,34 +185,157 @@ public class VueTemplate {
                 if (rule instanceof CSSStyleRule) {
                     CSSStyleRule styleRule = (CSSStyleRule) rule;
 
-                    // 处理选择器
                     for (int j = 0; j < styleRule.getSelectorCount(); j++) {
                         CSSSelector selector = styleRule.getSelectorAtIndex(j);
 
                         if (module) {
-                            // Module: 替换类名
                             processSelectorForModule(selector, moduleClassMapping, moduleName);
                         }
 
                         if (scoped) {
-                            // Scoped: 添加 [data-v-xxx]
-                            addScopedToSelector(selector);
+                            // 按选择器维度判断是否含有 deep 占位符
+                            if (deepInnerSelectors.isEmpty() || !selectorContainsDeepPlaceholder(selector)) {
+                                // 没有 :deep() — 原逻辑：直接追加 [data-v-xxx] 到最后一个 member
+                                addScopedToSelector(selector);
+                            } else {
+                                // 跳出 :deep() 占位符，scoped 加到最后一个非 deep 的 member 上
+                                addScopedToSelectorSkippingDeep(selector);
+                            }
                         }
                     }
                 }
             }
 
             StringWriter writer = new StringWriter();
-            CSSWriter cssWriter=  new CSSWriter();
-            cssWriter.setWriteHeaderText( false);
+            CSSWriter cssWriter = new CSSWriter();
+            cssWriter.setWriteHeaderText(false);
             cssWriter.writeCSS(cssParsed, writer);
 
-            return writer.toString();
+            String result = writer.toString();
+
+            // 后处理：把占位符恢复（同时去掉占位符上可能追加的 [data-v-xxx]）
+            if (!deepInnerSelectors.isEmpty()) {
+                result = restoreDeepPlaceholders(result, deepInnerSelectors);
+            }
+
+            return result;
 
         } catch (Exception e) {
             e.printStackTrace();
             return cssContent;
         }
+    }
+
+    /**
+     * 预处理 CSS：把 :deep(.foo) 替换为唯一占位符 __DEEP_0__ 等
+     */
+    private static String preprocessDeep(String css, List<String> innerSelectors) {
+        StringBuffer sb = new StringBuffer();
+        Matcher m = DEEP_PATTERN.matcher(css);
+        int idx = 0;
+        while (m.find()) {
+            String inner = m.group(1).trim();
+            innerSelectors.add(inner);
+            m.appendReplacement(sb, Matcher.quoteReplacement("__DEEP_" + (idx++) + "__"));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    /**
+     * 后处理：把 __DEEP_N__[data-v-xxx] 恢复为原始选择器内容（去掉 scoped 属性）
+     * 或 __DEEP_N__（没加 scoped 的情况）也恢复
+     */
+    private static String restoreDeepPlaceholders(String css, List<String> innerSelectors) {
+        Pattern restorePattern = Pattern.compile("__DEEP_(\\d+)__(\\[data-v-[a-z0-9]+\\])?");
+        StringBuffer sb = new StringBuffer();
+        Matcher m = restorePattern.matcher(css);
+        while (m.find()) {
+            int idx = Integer.parseInt(m.group(1));
+            String replacement = idx < innerSelectors.size() ? innerSelectors.get(idx) : "";
+            m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    // ========================================================================
+    // Scoped 选择器处理
+    // ========================================================================
+
+    /**
+     * 没有 :deep() 时的原逻辑：在最后一个 member 上追加 [data-v-xxx]
+     */
+    private void addScopedToSelector(CSSSelector selector) {
+        int lastIdx = selector.getMemberCount() - 1;
+        if (lastIdx >= 0) {
+            ICSSSelectorMember lastMember = selector.getMemberAtIndex(lastIdx);
+            String originalValue = lastMember.getAsCSSString();
+
+            selector.removeMember(lastIdx);
+            selector.addMember(lastIdx, new CSSSelectorSimpleMember(
+                    originalValue + "[" + scopedAttribute + "]"
+            ));
+        }
+    }
+
+    /**
+     * 有 :deep() 时选择器加 scoped 属性：跳过占位符 member，只对普通 member 加 [data-v-xxx]
+     *
+     * <p>因为 :deep(.foo) 在预处理阶段被替换成了 __DEEP_N__ 占位符，
+     * 所以需要：</p>
+     * <ul>
+     *   <li>:deep() 在尾部（如 .foo :deep(.bar)） → scoped 加到最后一个 deep 前面的 member</li>
+     *   <li>:deep() 在中间（如 .foo :deep(.bar) .baz） → scoped 加到 deep 前面的最后一个 member</li>
+     *   <li>仅有 :deep() → 不加 scoped</li>
+     * </ul>
+     */
+    private void addScopedToSelectorSkippingDeep(CSSSelector selector) {
+        int memberCount = selector.getMemberCount();
+        if (memberCount == 0) return;
+
+        // 找到 deep 占位符前面最近的普通 member
+        int scopedTargetIndex = -1;
+        for (int i = 0; i < memberCount; i++) {
+            String v = selector.getMemberAtIndex(i).getAsCSSString();
+            if (isDeepPlaceholder(v)) {
+                // 遇到 deep 占位符，跳出循环。scopedTargetIndex 就是它前面最后一个非 deep member
+                break;
+            }
+            if (!v.trim().isEmpty()
+                    && !">".equals(v.trim()) && !"+".equals(v.trim()) && !"~".equals(v.trim())) {
+                scopedTargetIndex = i;
+            }
+        }
+
+        if (scopedTargetIndex < 0) {
+            // 选择器以 :deep() 开头，整个不加 scoped
+            return;
+        }
+
+        // 在 deep 前面的最后一个非 deep member 上加 scoped
+        ICSSSelectorMember member = selector.getMemberAtIndex(scopedTargetIndex);
+        String origValue = member.getAsCSSString();
+        selector.removeMember(scopedTargetIndex);
+        selector.addMember(scopedTargetIndex, new CSSSelectorSimpleMember(
+                origValue + "[" + scopedAttribute + "]"
+        ));
+    }
+
+    private static boolean isDeepPlaceholder(String value) {
+        return value.startsWith("__DEEP_") && value.endsWith("__");
+    }
+
+    /**
+     * 检查选择器的 member 中是否包含 deep 占位符
+     */
+    private static boolean selectorContainsDeepPlaceholder(CSSSelector selector) {
+        for (int i = 0; i < selector.getMemberCount(); i++) {
+            if (isDeepPlaceholder(selector.getMemberAtIndex(i).getAsCSSString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -230,23 +369,6 @@ public class VueTemplate {
         }
     }
 
-    /**
-     * 为选择器添加 scoped 属性
-     */
-    private void addScopedToSelector(CSSSelector selector) {
-        int lastIdx = selector.getMemberCount() - 1;
-        if (lastIdx >= 0) {
-            ICSSSelectorMember lastMember = selector.getMemberAtIndex(lastIdx);
-            String originalValue = lastMember.getAsCSSString();
-
-            selector.removeMember(lastIdx);
-            ICSSSelectorMember newMember = new CSSSelectorSimpleMember(
-                    originalValue + "[" + scopedAttribute + "]"
-            );
-            selector.addMember(newMember);
-        }
-    }
-
 
     /**
      * 更新 template 中所有元素的 class（真正的 DOM 处理）
@@ -277,7 +399,7 @@ public class VueTemplate {
                     element.attr("class", newClasses.toString().trim());
                 }
             }
-            
+
             // 处理 :class 绑定，将 $style. 替换为 def_m_style.
             if (element.hasAttr(":class")) {
                 String dynamicClass = element.attr(":class");
