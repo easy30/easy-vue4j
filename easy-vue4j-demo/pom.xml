@@ -30,7 +30,7 @@
         <dependency>
             <groupId>io.github.easy30</groupId>
             <artifactId>easy-vue4j</artifactId>
-            <version>1.0.4</version>
+            <version>1.0.5</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

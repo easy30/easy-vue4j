@@ -1,4 +1,3 @@
-import com.github.easy30.vue4j.VueTemplate;
 import com.helger.css.decl.*;
 import com.helger.css.reader.CSSReader;
 import com.helger.css.writer.CSSWriter;

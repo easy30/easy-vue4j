@@ -10,7 +10,6 @@
     
     <modules>
         <module>easy-vue4j</module>
-        <module>easy-vue4j-java8-demo</module>
         <module>easy-vue4j-demo</module>
     </modules>
  

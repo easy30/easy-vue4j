@@ -21,10 +21,10 @@
   </dependency>
 ```
 - 用nashorn 调用babel 实现转换
-- 修改/Users/apple/cyber/easy-vue4j/easy-vue4j/src/main/java/com/github/easy30/vue4j/VueCache.java , 对.ts文件进行转换
-  com.github.easy30.vue4j.VueCache.getContent(com.github.easy30.vue4j.util.resource.BaseResource, java.lang.String, java.lang.String)
+- 修改/Users/apple/cyber/easy-vue4j/easy-vue4j/src/main/java/io/github/easy30/vue4j/VueCache.java , 对.ts文件进行转换
+  io.github.easy30.vue4j.VueCache.getContent(io.github.easy30.vue4j.util.resource.BaseResource, java.lang.String, java.lang.String)
 - httpApi.ts 和 http.js 直接改为浏览器支持的httpApi.js, 代码放入/Users/apple/cyber/easy-vue4j/easy-vue4j/src/main/resources/core-js 目录,
-   /Users/apple/cyber/easy-vue4j/easy-vue4j-java8-demo/src/main/resources/easy-vue4j.properties 配置浏览器访问路径,如 http.api.path=/core-js
+   /Users/apple/cyber/easy-vue4j/easy-vue4j-demo/src/main/resources/easy-vue4j.properties 配置浏览器访问路径,如 http.api.path=/core-js
   VueCache.java 识别到http.api.path则会直接读取资源下面的core-js目录相应文件返回.
   httpApi.ts 是核心处理代理的代码,   http.js 根据不同的http客户端引擎而不一样,如axios.  这两个文件如果前端要用我的http框架则必须引用.
 

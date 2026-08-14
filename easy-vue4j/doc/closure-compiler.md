@@ -16,7 +16,7 @@
 //BabelLikeJavaParser parser = new BabelLikeJavaParser();
 //Set<String> exports = parser.collectTopLevelBindings(code);
 
-package com.github.easy30.vue4j;
+package io.github.easy30.vue4j;
 
 import com.google.javascript.jscomp.Compiler;
 import com.google.javascript.jscomp.CompilerOptions;

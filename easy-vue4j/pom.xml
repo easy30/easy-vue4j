@@ -5,7 +5,7 @@
     <groupId>io.github.easy30</groupId>
     <artifactId>easy-vue4j</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.4</version>
+    <version>1.0.5</version>
     <name>easy-vue4j</name>
     <description>Easy Vue4J - A runtime Vue 3 SFC compiler for Java</description>
     <url>https://github.com/easy30/easy-vue4j</url>

@@ -6,114 +6,62 @@
 - **无构建前端**：配合 ES Module + importmap 直接在浏览器中加载组件
 - **双 Servlet 版本**：同时支持 javax（Java 8 / Spring Boot 2.x）与 jakarta（JDK 17+ / Spring Boot 3.x）
 
-## 📦 项目结构
-
-```
-easy-vue4j/
-├── easy-vue4j/                 # 核心库
-│   └── src/main/java/com/github/easy30/vue4j/
-│       ├── VueFilter.java      # Servlet 过滤器（javax，Java 8 / Spring Boot 2.x）
-│       ├── VueJkFilter.java    # Servlet 过滤器（jakarta，Spring Boot 3.x）
-│       ├── VueFilterCore.java  # 过滤逻辑核心（环境配置、缓存、转换调度）
-│       ├── VueCache.java       # 文件缓存管理器
-│       ├── VueToJs.java        # Vue 转 JS 转换器
-│       ├── VueTemplate.java    # 模板处理器
-│       └── ...                 # 资源、工具、对象等
-├── easy-vue4j-demo/            # 示例项目（jk，Spring Boot 3.x，含 HTTP AOP / api-demo）
-│   ├── src/main/resources/static/
-│   │   ├── index.html          # 主页面（ES Module + importmap）
-│   │   ├── routes.js           # 路由配置
-│   │   ├── views/*.vue         # Vue 组件
-│   │   └── api/api-demo.ts     # TypeScript + 装饰器 API 定义
-│   └── pom.xml
-└── easy-vue4j-java8-demo/      # 示例项目（javax，Java 8 / Spring Boot 2.7）
-    └── src/main/resources/static/
-        ├── index.html
-        ├── routes.js
-        └── *.vue               # Vue 组件（扁平结构）
-```
-
 ## 🚀 快速开始
 
 ### 1. 环境要求
 
 - **easy-vue4j-demo**：JDK > 8、Spring Boot 3.x（jakarta）
-- **easy-vue4j-java8-demo**：JDK 8、Spring Boot 2.x（javax）
 - Maven 3.6+
 
-### 2. 构建核心库（安装到本地 Maven 仓库）
+ 
+### 2. 启动 Demo 项目
 
 ```bash
-cd easy-vue4j
-mvn clean install -DskipTests
-```
-
-### 3. 启动 Demo 项目
-
-```bash
-# 启动 jk 版（推荐，功能最全）
+# 启动 demo（功能最全）
 cd easy-vue4j-demo
 mvn spring-boot:run
 ```
 
 或直接运行 `DemoApplication.java` 的 main 方法。
 
-### 4. 访问应用
+### 3. 访问应用
 
 浏览器打开：**http://localhost:8080/**
 
 默认会重定向到：**http://localhost:8080/#/log-level**
 
-## ⚙️ 配置
+### 4. 本地调试（热更新）
 
-所有配置统一按优先级 `-D 系统属性 > easy-vue4j.properties > 缺省值` 解析，无需在 `AppConfig.java` 硬编码。
+本地调试时只需要把 `vue4j.resource.root` 指向真实的文件路径，就能在修改 `.vue` / `.ts` / `routes.js` 文件后**刷新浏览器即生效**（无需重启、无需构建）。
 
-> 💡 系统属性也可用 `System.setProperty(...)` 注入（与 `-D` 共用同一张全局属性表，框架读 `System.getProperty` 即可取到），适合在启动代码里以编程方式兜底设置；应优先用 `-D`，仅在无法用启动参数时使用。
-
-**命名约定：**
-- 配置文件里使用**无前缀**键，如 `resource.root`
-- `-D` 注入时使用 **`vue4j.` 前缀**，如 `-Dvue4j.resource.root=...` 对应配置里的 `resource.root=...`（避免与 JVM 通用系统属性撞名）
-- 不区分环境，资源配置统一为 `resource.root`
-
-例如启动时用 `-D` 覆盖：
-
-```bash
-java -Dvue4j.resource.root=src/main/resources/static -jar xxx.jar
-# 或 Maven 方式
-mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dvue4j.resource.root=src/main/resources/static"
-```
-
-各参数的缺省值：
-
-| 配置 | 缺省值 | 说明 |
-|------|--------|------|
-| `resource.root` | `classpath:/static` | 资源根路径 |
-| `default.index` | `index.html` | 默认首页 |
-| `vue.ext` | `.vue` | Vue 文件扩展名 |
-| `filter.exclude` | 空 | 不经过 Filter 的资源（精确匹配 / 目录前缀 `/*` / 后缀匹配） |
-| `filter.exclude-no-ext` | `true` | 无扩展名路径是否跳过 Filter |
-| `esbuild.path` | 空（自动下载到 `~/.easy-vue4j/esbuild`） | TS / 装饰器转译 |
-
-**热更新（自动决定，无需配置）：**
-- `resource.root` 为**本地文件路径**（非 `classpath:`）→ 自动热更新，改文件后刷新即生效
-- `resource.root` 为 `classpath:`（或打包成 jar 内资源）→ 使用缓存，不做热更新
-- 开发时若希望热更新，把 `resource.root` 指向真实文件路径（如 `src/main/resources/static`）
-
-`easy-vue4j.properties` 示例（一般放各项目 `src/main/resources/`）：
+默认 `vue4j.resource.root` 缺省值是 `classpath:/static`（走缓存）。要开启热更新，编辑 `easy-vue4j-demo/src/main/resources/easy-vue4j.properties`，取消注释并指向本地文件路径：
 
 ```properties
-# 资源根路径（可选；不配置时使用缺省值 classpath:/static）
-# resource.root=classpath:/static
-# 开发时如需热更新，指向本地文件路径：
-# resource.root=src/main/resources/static
-
-# Filter 排除：不经过 Filter 的资源（支持精确匹配 / 目录前缀 /* / 后缀匹配）
-filter.exclude=/favicon.ico, /robots.txt, *.min.js, *.min.css
-filter.exclude-no-ext=true
-
-# esbuild 转译路径（可选，用于 .ts / 装饰器转译；不配置时自动下载到 ~/.easy-vue4j/esbuild）
-# esbuild.path=/path/to/esbuild
+vue4j.resource.root=src/main/resources/static
 ```
+
+> 热更新由框架自动决定：`vue4j.resource.root` 为本地文件路径（非 `classpath:`）时自动开启，改文件后刷新即生效；为 `classpath:`（或打进 jar）时走缓存、不做热更新。
+
+
+## 配置
+
+### 引入依赖（Maven 1.0.5）
+
+在项目的 `pom.xml` 中引入 `easy-vue4j` 核心库（当前最新版本 **1.0.5**）：
+
+```xml
+<dependency>
+    <groupId>io.github.easy30</groupId>
+    <artifactId>easy-vue4j</artifactId>
+    <version>1.0.5</version>
+</dependency>
+```
+
+Demo 项目的 `easy-vue4j-demo`（jakarta / Boot 3.x）已引入该依赖，可直接作为参考。
+
+> 提示：核心库同时兼容 javax 与 jakarta（分别提供 `VueFilter` / `VueJkFilter`，用于 Spring Boot 2.x / 3.x），无需区分坐标。
+
+
 
 ### Filter 注册（AppConfig)
 
@@ -130,23 +78,150 @@ public FilterRegistrationBean<VueJkFilter> vueFilterRegistrationBean() {
 }
 ```
 
-> 💡 环境与业务参数均通过 `-D` 或 `easy-vue4j.properties` 配置，不再写进 Spring 的 init-parameter。
+### ⚙️ 参数配置
 
-## 🎯 Demo 功能模块
 
-| 路由 | 组件 | 功能描述 |
-|------|------|---------|
-| `/log-level` | `setLogLevel.vue` | 设置 Logger 日志级别 |
-| `/system-monitor` | `systemMonitor.vue` | 系统监控（CPU、内存） |
-| `/log-query` | `logQuery.vue` | 日志查询 |
-| `/appender-config` | `appenderConfig.vue` | Logback Appender 配置 |
-| `/hello` | `hello.vue` | Hello World（演示 CSS Modules） |
-| `/setup-test` | `setup-test.vue` | `<script setup>` 自动暴露 / 解构 / 可选链测试 |
-| `/api-demo` | `api-demo.vue` | HTTP AOP 装饰器测试（仅 easy-vue4j-demo） |
 
-## 📖 使用示例
+所有配置统一按优先级 `-D 系统属性 > easy-vue4j.properties > 缺省值` 解析，无需在 `AppConfig.java` 硬编码。
+ 
+**命名约定：**
+- 所有配置键统一以 **`vue4j.` 开头**，`easy-vue4j.properties` 与 `-D` 注入写法**完全一致**，如 `vue4j.resource.root`
+- `-D` 注入同样带 `vue4j.` 前缀，如 `-Dvue4j.resource.root=...` 对应配置里的 `vue4j.resource.root=...`
+- 不区分环境，资源配置统一为 `vue4j.resource.root`
 
-### 创建新的 Vue 组件
+例如启动时用 `-D` 覆盖：
+
+```bash
+java -Dvue4j.resource.root=src/main/resources/static -jar xxx.jar
+# 或 Maven 方式
+mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dvue4j.resource.root=src/main/resources/static"
+```
+
+各参数的缺省值：
+
+| 配置 | 缺省值 | 说明 |
+|------|--------|------|
+| `vue4j.resource.root` | `classpath:/static` | 资源根路径 |
+| `vue4j.default.index` | `index.html` | 默认首页 |
+| `vue4j.vue.ext` | `.vue` | Vue 文件扩展名 |
+| `vue4j.filter.exclude` | 空 | 不经过 Filter 的资源（精确匹配 / 目录前缀 `/*` / 后缀匹配） |
+| `vue4j.filter.exclude-no-ext` | `true` | 无扩展名路径是否跳过 Filter |
+| `vue4j.esbuild.path` | 空（自动下载到 `~/.easy-vue4j/esbuild`） | TS / 装饰器转译 |
+
+**热更新（自动决定，无需配置）：**
+- `vue4j.resource.root` 为**本地文件路径**（非 `classpath:`）→ 自动热更新，改文件后刷新即生效
+- `vue4j.resource.root` 为 `classpath:`（或打包成 jar 内资源）→ 使用缓存，不做热更新
+- 开发时若希望热更新，把 `vue4j.resource.root` 指向真实文件路径（如 `src/main/resources/static`）
+
+`easy-vue4j.properties` 示例（一般放各项目 `src/main/resources/`）：
+
+```properties
+# 资源根路径（可选；不配置时使用缺省值 classpath:/static）
+# vue4j.resource.root=classpath:/static
+# 开发时如需热更新，指向本地文件路径：
+# vue4j.resource.root=src/main/resources/static
+
+# Filter 排除：不经过 Filter 的资源（支持精确匹配 / 目录前缀 /* / 后缀匹配）
+vue4j.filter.exclude=/favicon.ico, /robots.txt, *.min.js, *.min.css
+vue4j.filter.exclude-no-ext=true
+
+# esbuild 转译路径（可选，用于 .ts / 装饰器转译；不配置时自动下载到 ~/.easy-vue4j/esbuild）
+# vue4j.esbuild.path=/path/to/esbuild
+```
+
+ 
+
+## 🎯 前端Demo 
+
+**Vue** 3.5.31、**Vue Router** 4.6.4、**Element Plus** 2.13.6、**Axios** 1.13.6
+
+### index.html
+
+`index.html` 是单页应用的**唯一入口**，包含三部分：
+
+1. **依赖引入**：用 `<link>` 引入 Element Plus 样式与图标库，用 `<script type="importmap">` 声明各依赖（Vue、Vue Router、Element Plus、Axios 及框架提供的 `api-aop*`）映射到本地 `vendor/` 文件：
+
+   ```html
+   <script type="importmap">
+   {
+     "imports": {
+       "vue": "./vendor/js/vue@3.5.31.esm-browser.js",
+       "vue-router": "./vendor/js/vue-router@4.6.4.esm-browser.js",
+       "element-plus": "./vendor/js/element-plus@2.13.6.esm-browser.mjs",
+       "axios": "./vendor/js/axios@1.13.6.esm-browser.js",
+       "api-aop": "./client-js/api-aop.js",
+       "api-aop-axios": "./client-js/api-aop-axios.js"
+     }
+   }
+   </script>
+   ```
+
+2. **页面骨架**：左侧 `<el-menu>` 为菜单（每个 `el-menu-item` 的 `index` 对应路由路径，跳转时通过 `@select` 触发 `router.push`），右侧为 `<router-view>` 路由出口，配合 `keep-alive` 缓存组件。
+
+3. **启动逻辑**（底部 `<script type="module">`）：动态 `import('./routes.js')` 加载路由配置 → `setup({ baseURL: '/', defaultBodyType: 'json' })` 初始化 HTTP AOP → 创建路由与根组件 → 注册 Element Plus 后挂载到 `#app`。
+
+<!-- placeholder 3 -->
+### routes.js
+
+`routes.js` 集中管理**前端路由**，采用 Vue Router 4 的 hash 模式配置，导出默认路由数组。每个路由通过懒加载 `component: () => import('./views/xxx.vue')` 指向对应的 `.vue` 组件，并用 `meta.title` 定义菜单/标题文案；`/` 重定向到默认首页：
+
+```javascript
+import { defineAsyncComponent } from 'vue';
+
+const routes = [
+    {
+        path: '/log-level',
+        name: 'SetLogLevel',
+        component: () => import('./views/setLogLevel.vue'),
+        meta: { title: '日志级别设置' }
+    },
+    // ... 其他路由
+    {
+        path: '/',
+        redirect: '/log-level'
+    }
+];
+
+export default routes;
+```
+
+新增页面时只需在 `routes.js` 中添加一条配置，同时在 `index.html` 的菜单里加一个指向对应 `path` 的 `el-menu-item` 即可。
+
+### views
+
+`views/` 目录存放所有 Vue 单文件组件（`.vue`），易用 Vue 3 `<script setup>` 语法，支持 CSS Modules 与 Element Plus 组件。Demo 中已有示例组件（每个都展示了不同的能力）：
+
+| 组件 | 说明 |
+|------|------|
+| `hello.vue` | 基础示例：`script setup` + `<style scoped>` / `<style module>` 多区块 |
+| `setup-test.vue` | 完整展示 `<script setup>` 的自动暴露：`ref` / `reactive` / `computed` / 解构 / 可选链等 |
+| `api-demo.vue` | HTTP AOP 装饰器测试：JSON Body / Form Body / GET 三种请求 |
+| `logQuery.vue` | 日志查询页面 |
+| `setLogLevel.vue` | 日志级别设置页面 |
+| `appenderConfig.vue` | Appender 配置页面 |
+| `systemMonitor.vue` | 系统监控页面 |
+
+一个最简单的 `hello.vue` 写法：
+
+```vue
+<template>
+  <div :class="$style.container">
+    <h1 :class="m1.title">{{ title }}</h1>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue';
+const title = ref('欢迎');
+</script>
+
+<style module>
+.container { padding: 20px; }
+</style>
+<style module="m1">
+.title { color: blue; }
+</style>
+```
 
 1. **在 `src/main/resources/static/` 目录创建 `.vue` 文件**（easy-vue4j-demo 放 `views/` 下）：
 
@@ -189,23 +264,13 @@ const title = ref('欢迎');
 </el-menu-item>
 ```
 
-## 🔧 技术栈
-
-### 后端
-- **Spring Boot**: 3.4.3（jk 版）/ 2.7.18（java8 版）
-- **Servlet**: jakarta（Spring Boot 3.x）/ javax（Spring Boot 2.x）
-- **Lombok / Commons-IO / Commons-Lang3**
-- **Jsoup**（HTML/XML 解析）、**Ph-CSS**（CSS 解析）、**Gson**（JSON 处理）
-- **esbuild / Rhino / Babel**（TS + 装饰器转译）
-
-### 前端
-- **Vue** 3.5.31、**Vue Router** 4.6.4、**Element Plus** 2.13.6、**Axios** 1.13.6、**Font Awesome** 6.4.0
+ 
 
 ## 🐛 常见问题
 
 ### Q1: 访问 http://localhost:8080/ 返回 404
 
-**原因**: 未正确注册 Filter，或 `default.index` 找不到对应文件。
+**原因**: 未正确注册 Filter，或 `vue4j.default.index` 找不到对应文件。
 
 **解决**:
 1. 确认 `AppConfig` 已注册 `VueJkFilter`（或 `VueFilter`）
@@ -226,17 +291,17 @@ mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dvue4j.resource.root=/data/
 
 **可能原因**:
 1. Filter 未正确注册
-2. `resource.root` 路径配置错误
+2. `vue4j.resource.root` 路径配置错误
 3. `.vue` 文件语法错误
 
 **排查步骤**:
 1. 检查控制台日志，确认 Filter 初始化成功
-2. 验证 `easy-vue4j.properties` 中 `resource.root` 指向的路径存在
+2. 验证 `easy-vue4j.properties` 中 `vue4j.resource.root` 指向的路径存在
 3. 查看浏览器开发者工具的网络请求
 
 ### Q4: 访问 .ts API 或装饰器报错 / 首次加载慢
 
-- 首次访问 esbuild 转译需要初始化（可配置 `esbuild.path` 指向本地 esbuild 二进制，避免每次自动下载）
+- 首次访问 esbuild 转译需要初始化（可配置 `vue4j.esbuild.path` 指向本地 esbuild 二进制，避免每次自动下载）
 - 确认网络可达 `registry.npmjs.org`（自动下载 esbuild 时需要）
 - 转换结果会被缓存，后续访问更快
 
@@ -254,7 +319,7 @@ mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dvue4j.resource.root=/data/
 
 ---
 
-**最后更新时间**: 2026-08-14（文档已同步 easy-vue4j 1.0.4）
+**最后更新时间**: 2026-08-14（文档已同步 easy-vue4j 1.0.5）
 
 ---
 
@@ -264,10 +329,7 @@ mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dvue4j.resource.root=/data/
 
 无需 Webpack/Vite 构建，直接在浏览器中运行 Vue 单文件组件：
 
-- 自动提取 `<template>` 并编译为 render 函数
-- 自动处理 `<script>` 和 `<script setup>`
-- 支持 CSS Modules（`$style` 对象注入）、命名 Module（`<style module="m1">`）
-- 支持 scoped 样式隔离
+
 
 ### 2. HTTP AOP（装饰器式 API 定义）
 
@@ -322,4 +384,4 @@ export const demoApi = new DemoApi();
 
 ### 4. 热更新支持
 
-热更新**自动决定**，无需配置：`resource.root` 为本地文件路径（非 `classpath:`）时自动开启，改文件后刷新即生效；`classpath:` / jar 内资源使用缓存。开发时把 `resource.root` 指向真实文件路径即可获得热更新。
+热更新**自动决定**，无需配置：`vue4j.resource.root` 为本地文件路径（非 `classpath:`）时自动开启，改文件后刷新即生效；`classpath:` / jar 内资源使用缓存。开发时把 `vue4j.resource.root` 指向真实文件路径即可获得热更新。
