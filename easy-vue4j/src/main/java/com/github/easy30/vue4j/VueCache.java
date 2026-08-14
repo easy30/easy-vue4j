@@ -44,24 +44,29 @@ public class VueCache {
     }
 
     /**
-     * 带缓存的转换逻辑，避免重复读取和转换
+     * 带缓存的转换逻辑，避免重复读取和转换。
+     * <p>
+     * 热更新自动决定：仅当 resource.root 为本地文件路径（非 classpath）时才检查文件变化；
+     * classpath / jar 内资源直接使用缓存。
      *
      * @param filename    资源文件名
      * @param servletPath 资源路径
      * @param charset     字符编码
-     * @param needReload  是否需要热更新（true=检查文件变化，false=使用缓存）
      * @return CacheContent 对象（包含内容和最后修改时间）
      * @throws IOException 当读取资源或转换失败时抛出
      */
-    public CacheContent getContent(String filename, String servletPath, String charset, boolean needReload) throws IOException {
+    public CacheContent getContent(String filename, String servletPath, String charset) throws IOException {
         BaseResource resource =  isResource?  new ClassPathResource(root+ servletPath)
                 : new FileResource(new File(root, servletPath));
+
+        // 本地文件路径才做热更新（能拿到真实 lastModified）；classpath/jar 直接用缓存
+        boolean hotReload = !isResource;
 
         // 检查缓存
         CacheContent  cacheContent= cache.get(servletPath);
         long lastModified=-1 ;
         if (cacheContent != null) {
-            if(!needReload) return cacheContent;
+            if(!hotReload) return cacheContent;
             lastModified = resource.getLastModified();
             if (!hasChanged(cacheContent, lastModified)) {
                 log.debug("Cache hit for Vue file: {}", filename);

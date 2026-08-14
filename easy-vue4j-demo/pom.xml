@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.github.easy30</groupId>
+    <groupId>io.github.easy30</groupId>
     <artifactId>easy-vue4j-demo</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
@@ -28,9 +28,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>com.github.easy30</groupId>
+            <groupId>io.github.easy30</groupId>
             <artifactId>easy-vue4j</artifactId>
-            <version>1.0.3-SNAPSHOT</version>
+            <version>1.0.4</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

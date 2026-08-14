@@ -24,13 +24,8 @@ public class AppConfig implements WebMvcConfigurer {
         registrationBean.addUrlPatterns("*.html");*/
         registrationBean.setOrder(1); // 确保在其他过滤器之前执行
         
-        // 环境配置通过 init-parameter 传入
-        registrationBean.addInitParameter("vue4j.env", "dev");
-        
-        // charset、resourceRoot、vueExt 等参数现在从 easy-vue4j.properties 读取
-        // 如果需要覆盖配置文件，可以在这里添加
-        // registrationBean.addInitParameter("charset", "UTF-8");
-        // registrationBean.addInitParameter("resourceRoot", "classpath:/static");
+        // 参数均通过 easy-vue4j.properties 或 -D 系统属性配置，无需在此硬编码。
+        // 例如：-Dvue4j.resource.root=...
         
         return registrationBean;
     }

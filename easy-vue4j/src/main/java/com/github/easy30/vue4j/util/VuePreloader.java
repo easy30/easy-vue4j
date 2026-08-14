@@ -68,7 +68,7 @@ public class VuePreloader {
             try {
                 String relativePath = getRelativePath(baseDir, vueFile);
                 String filename = vueFile.getName();
-                vueCache.getContent(filename, relativePath, charset, false);
+                vueCache.getContent(filename, relativePath, charset);
                 successCount++;
                 log.debug("Preloaded Vue file: {}", relativePath);
             } catch (Exception e) {
@@ -118,7 +118,7 @@ public class VuePreloader {
                     try {
                         String relativePath = getRelativePath(fileBaseDir, vueFile);
                         String filename = vueFile.getName();
-                        vueCache.getContent(filename, relativePath, charset, false);
+                        vueCache.getContent(filename, relativePath, charset);
                         successCount++;
                         log.debug("Preloaded Vue file: {}", relativePath);
                     } catch (Exception e) {
@@ -193,7 +193,7 @@ public class VuePreloader {
                         String filename = vueFile.getFileName().toString();
 
                         // 预热（vueCache.getContent 会自己读取文件）
-                        vueCache.getContent(filename, relativePath, charset, false);
+                        vueCache.getContent(filename, relativePath, charset);
                         successCount++;
                         log.debug("Preloaded Vue file from JAR: {}", relativePath);
                     } catch (Exception e) {

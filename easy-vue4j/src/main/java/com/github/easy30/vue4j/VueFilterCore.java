@@ -27,7 +27,6 @@ public class VueFilterCore {
     private String resourceRoot;
     private String vueExt;
     private String defaultIndex;
-    private boolean reloadEnabled;
     private String filterExclude;
     private boolean excludeNoExt;
     private String filterClientJsPath;
@@ -38,48 +37,60 @@ public class VueFilterCore {
     private boolean noCache;
 
     /**
+     * 统一的配置取值：优先级 -D 系统属性 > properties > 缺省值
+     * <p>
+     * 系统属性读取时自动兼容两种写法：key 本身、以及带 "vue4j." 前缀的 vue4j.key
+     * （如配置 resource.root，可用 -Dvue4j.resource.root 覆盖）。
+     * key 若已以 "vue4j." 开头则不再叠加前缀。
+     *
+     * @param config easy-vue4j.properties 配置
+     * @param key    配置键名（如 resource.root、vue.ext）
+     * @param def    缺省值
+     */
+    private static String resolve(Properties config, String key, String def) {
+        String sys = System.getProperty(key);
+        if (sys != null) {
+            return sys;
+        }
+        if (!key.startsWith("vue4j.")) {
+            sys = System.getProperty("vue4j." + key);
+            if (sys != null) {
+                return sys;
+            }
+        }
+        return config.getProperty(key, def);
+    }
+
+    /**
      * 初始化配置、缓存和预热线程
      *
-     * @param env       环境标识（dev / prod）
      * @param config    easy-vue4j.properties 配置
      * @param mimeLookup MIME 类型查找函数（由 ServletContext.getMimeType 实现）
      */
-    public void init(String env, Properties config, MimeTypeLookup mimeLookup) {
+    public void init( Properties config, MimeTypeLookup mimeLookup) {
         this.mimeLookup = mimeLookup;
 
-        charset = config.getProperty("charset", "UTF-8");
-        vueExt = config.getProperty("vue.ext", ".vue");
-        defaultIndex = config.getProperty("default.index", "index.html");
+        // 所有配置统一优先级：-D 系统属性（带 vue4j. 前缀） > easy-vue4j.properties > 缺省值
+        charset = resolve(config, "charset", "UTF-8");
+        vueExt = resolve(config, "vue.ext", ".vue");
+        defaultIndex = resolve(config, "default.index", "index.html");
 
-        // 资源根路径（按环境），优先读系统属性
-        String resourceRootKey = env + ".resource.root";
-        resourceRoot = System.getProperty(resourceRootKey);
-        if (resourceRoot == null) {
-            resourceRoot = config.getProperty(resourceRootKey, "classpath:/static");
-        }
+        // 资源根路径
+        resourceRoot = resolve(config, "resource.root", "classpath:/static");
 
-        // 热更新开关
-        reloadEnabled = Boolean.parseBoolean(
-                config.getProperty(env + ".reload", "dev".equals(env) ? "true" : "false")
-        );
+        filterExclude = resolve(config, "filter.exclude", "");
+        excludeNoExt = Boolean.parseBoolean(resolve(config, "filter.exclude-no-ext", "true"));
+        filterClientJsPath = resolve(config, "filter.client-js.path", "/client-js");
+        preloadEnabled = Boolean.parseBoolean(resolve(config, "vue4j.preload.enabled", "true"));
+        esbuildPath = resolve(config, "esbuild.path", "");
 
-        filterExclude = config.getProperty("filter.exclude", "");
-        excludeNoExt = Boolean.parseBoolean(
-                config.getProperty("filter.exclude-no-ext", "true")
-        );
-        filterClientJsPath = config.getProperty("filter.client-js.path", "/client-js");
-        preloadEnabled = Boolean.parseBoolean(config.getProperty("vue4j.preload.enabled", "true"));
-        esbuildPath = config.getProperty("esbuild.path", "");
-
-        noCache = Boolean.parseBoolean(config.getProperty("no-cache", "true"));
+        noCache = Boolean.parseBoolean(resolve(config, "no-cache", "true"));
 
         log.info("VueFilterCore config loaded:");
-        log.info("  - env: {}", env);
         log.info("  - charset: {}", charset);
-        log.info("  - {}.resource.root: {}", env, resourceRoot);
+        log.info("  - resource.root: {}", resourceRoot);
         log.info("  - vue.ext: {}", vueExt);
         log.info("  - default.index: {}", defaultIndex);
-        log.info("  - {}.reload: {}", env, reloadEnabled);
         log.info("  - filter.exclude: {}", filterExclude);
         log.info("  - filter.exclude-no-ext: {}", excludeNoExt);
         log.info("  - filter.client-js.path: {}", filterClientJsPath);
@@ -145,10 +156,7 @@ public class VueFilterCore {
             return;
         }
 
-        // 4. 热更新判断
-        boolean needReload = shouldReload(servletPath);
-
-        // 5. 缓存控制头：统一使用 no-cache 让浏览器每次请求都向服务器验证文件是否变化（通过 Last-Modified / 304），
+        // 4. 缓存控制头：统一使用 no-cache 让浏览器每次请求都向服务器验证文件是否变化（通过 Last-Modified / 304），
         //    确保发布新版本后浏览器能及时获取最新文件，同时未变化的文件仍可走 304 减少带宽
         //如果 noCache=false,则需要前端自己控制缓存,如通过v=version参数来控制vue和js的缓存
         if(noCache) {
@@ -159,7 +167,7 @@ public class VueFilterCore {
 
         try {
             String filename = servletPath.substring(servletPath.lastIndexOf('/') + 1);
-            CacheContent cacheContent = vueCache.getContent(filename, servletPath, charset, needReload);
+            CacheContent cacheContent = vueCache.getContent(filename, servletPath, charset);
 
             if (cacheContent != null) {
                 long lastModified = cacheContent.getLastModified();
@@ -180,7 +188,7 @@ public class VueFilterCore {
                 response.writeBody(cacheContent.getContent());
                 response.flushBody();
 
-                log.debug("Served file: {} (reload={}, lastModified={})", servletPath, needReload, lastModified);
+                log.debug("Served file: {} (lastModified={})", servletPath, lastModified);
                 return;
             }
 
@@ -211,10 +219,6 @@ public class VueFilterCore {
     }
 
     // ========== 私有方法 ==========
-
-    private boolean shouldReload(String servletPath) {
-        return reloadEnabled;
-    }
 
     private boolean hasExtension(String path) {
         String filename = path.substring(path.lastIndexOf('/') + 1);

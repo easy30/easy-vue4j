@@ -1,18 +1,41 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.github.easy30</groupId>
+
+    <groupId>io.github.easy30</groupId>
     <artifactId>easy-vue4j</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.3-SNAPSHOT</version>
+    <version>1.0.4</version>
     <name>easy-vue4j</name>
-    <url>http://maven.apache.org</url>
-    
+    <description>Easy Vue4J - A runtime Vue 3 SFC compiler for Java</description>
+    <url>https://github.com/easy30/easy-vue4j</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>maruixiang</name>
+            <email>maruixiang@sina.com</email>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git@github.com:easy30/easy-vue4j.git</connection>
+        <developerConnection>scm:git:git@github.com:easy30/easy-vue4j.git</developerConnection>
+        <url>https://github.com/easy30/easy-vue4j</url>
+    </scm>
+
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
     <dependencies>
         <dependency>
             <groupId>junit</groupId>
@@ -60,7 +83,6 @@
             <version>2.0.16</version>
         </dependency>
         <dependency>
-            <!-- jsoup HTML parser library @ https://jsoup.org/ -->
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>1.22.1</version>
@@ -75,20 +97,14 @@
             <artifactId>gson</artifactId>
             <version>2.13.1</version>
         </dependency>
-        <!-- Nashorn JavaScript 引擎（Java 15+ 需要此依赖） -->
-      <!--  <dependency>
-            <groupId>org.openjdk.nashorn</groupId>
-            <artifactId>nashorn-core</artifactId>
-            <version>15.1</version>
-        </dependency>-->
         <dependency>
             <groupId>org.mozilla</groupId>
             <artifactId>rhino-engine</artifactId>
             <version>1.7.15.1</version>
         </dependency>
     </dependencies>
-    
 
+    <!-- 默认使用私服（nexus 192.168.20.191） -->
     <distributionManagement>
         <repository>
             <id>internal-releases</id>
@@ -101,6 +117,7 @@
             <url>http://192.168.20.191:8081/repository/maven-snapshots/</url>
         </snapshotRepository>
     </distributionManagement>
+
     <build>
         <plugins>
             <plugin>
@@ -113,4 +130,82 @@
             </plugin>
         </plugins>
     </build>
+
+    <!-- 发布到 Maven Central（central.sonatype.com 新门户）的 profile，使用 -Pcentral 激活 -->
+    <profiles>
+        <profile>
+            <id>central</id>
+            <build>
+                <plugins>
+                    <!-- 生成 sources.jar -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- 生成 javadoc.jar -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <configuration>
+                            <!-- 跳过 doclint 校验，避免源码缺失 javadoc 注释导致构建失败 -->
+                            <doclint>none</doclint>
+                            <failOnError>false</failOnError>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- 使用本机 gpg 私钥对构件做 PGP 签名 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <configuration>
+                            <!-- 指定用于发布的签名密钥（无需 passphrase） -->
+                            <keyname>85AABEBC7DE72851AB65CAA69F4C7FBA77B9B2E6</keyname>
+                            <homedir>${user.home}/.gnupg</homedir>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- 新版 Central Publishing 插件：在 deploy 阶段自动打包上传到 central.sonatype.com 门户 -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.11.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <!-- 对应 ~/.m2/settings.xml 里 <server id="central"> 的账号认证 -->
+                            <publishingServerId>central</publishingServerId>
+                            <!-- 门户校验通过后自动发布，无需人工介入 -->
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>PUBLISHED</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.github.easy30</groupId>
+    <groupId>io.github.easy30</groupId>
     <artifactId>easy-vue4j-modules</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
@@ -10,7 +10,7 @@
     
     <modules>
         <module>easy-vue4j</module>
-        <module>easy-vue4j8-demo</module>
+        <module>easy-vue4j-java8-demo</module>
         <module>easy-vue4j-demo</module>
     </modules>
  

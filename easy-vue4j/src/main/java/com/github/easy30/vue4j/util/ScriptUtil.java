@@ -18,7 +18,7 @@ import java.time.Duration;
  * Rhino ScriptEngine + Babel/Acorn 引擎池（commons-pool2）
  * <p>
  * 启动时缺省保持 1 个空闲引擎，上限 4 个。
- * 调用方用完后 close() 归还。
+ * 超出 minIdle 的空闲引擎 60 秒后自动释放。
  */
 @Slf4j
 public class ScriptUtil {
@@ -29,8 +29,10 @@ public class ScriptUtil {
         GenericObjectPoolConfig<ScriptEngine> config = new GenericObjectPoolConfig<>();
         config.setMinIdle(1);
         config.setMaxIdle(1);
-        config.setMaxTotal(4);
-        config.setMaxWaitMillis(60*1000); //60秒
+        config.setMaxTotal(2);
+        config.setMaxWaitMillis(60*1000); // 60秒
+        config.setTimeBetweenEvictionRunsMillis(Duration.ofMinutes(10).toMillis()); //  检查空闲超时
+        config.setSoftMinEvictableIdleTimeMillis(Duration.ofMinutes(15).toMillis()); // 超出minIdle的部分空闲60秒后释放
         pool = new GenericObjectPool<>(new ScriptEngineFactory(), config);
     }
 
